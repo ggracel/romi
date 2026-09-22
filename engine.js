@@ -22,7 +22,6 @@ export function validate(cards) {
     const tryRun = (vals) => { vals.sort((a, b) => a - b); const span = vals[vals.length - 1] - vals[0] + 1; const need = span - vals.length; return need <= jok.length && span + (jok.length - need) <= 13; };
     if (tryRun(nat.map(RV))) return { type: 'run', label: 'Niz ' + nat[0].s, mode: 'normal' };
     if (tryRun(nat.map((c) => (RV(c) === 1 ? 14 : RV(c))))) return { type: 'run', label: 'Niz ' + nat[0].s, mode: 'aceHigh' };
-    if (nat.some((c) => RV(c) === 1) && tryRun(nat.map((c) => { const v = RV(c); return v >= 11 ? v - 13 : v; }))) return { type: 'run', label: 'Niz ' + nat[0].s + ' (čez rob)', mode: 'wrap' };
   }
   return null;
 }
@@ -33,23 +32,32 @@ export function arrange(cards, v) {
   const jok = cards.filter(isJ), nat = cards.filter((c) => !isJ(c));
   if (v.type === 'set') { const rk = nat.length ? nat[0].r : '?'; return cards.map((c) => ({ c, as: isJ(c) ? { r: rk, s: '?' } : null })); }
   const suit = nat[0].s;
-  const vv = (c) => { const r = RV(c); if (v.mode === 'aceHigh') return r === 1 ? 14 : r; if (v.mode === 'wrap') return r >= 11 ? r - 13 : r; return r; };
-  const show = (x) => { let r = x; if (v.mode === 'wrap' && r <= 0) r += 13; if (r === 14) r = 1; return RANKS[r - 1]; };
-  const lo = v.mode === 'wrap' ? -2 : 1, hi = v.mode === 'wrap' ? 13 : (v.mode === 'aceHigh' ? 14 : 13);
+  const vv = (c) => { const r = RV(c); if (v.mode === 'aceHigh') return r === 1 ? 14 : r; return r; };
+  const show = (x) => RANKS[(x === 14 ? 1 : x) - 1];
+  const lo = 1, hi = v.mode === 'aceHigh' ? 14 : 13;
   const slots = new Map(); nat.forEach((c) => slots.set(vv(c), { c, as: null }));
   let min = Math.min(...slots.keys()), max = Math.max(...slots.keys());
-  const gaps = () => { const g = []; for (let x = min + 1; x < max; x++) if (!slots.has(x)) g.push(x); return g; };
-  for (const j of jok) {
-    const i = cards.indexOf(j); let prev = null, next = null;
-    for (let k = i - 1; k >= 0; k--) if (!isJ(cards[k])) { prev = cards[k]; break; }
-    for (let k = i + 1; k < cards.length; k++) if (!isJ(cards[k])) { next = cards[k]; break; }
-    let placed = false;
-    const put = (x) => { slots.set(x, { c: j, as: { r: show(x), s: suit } }); placed = true; };
-    if (prev && next) { const a = vv(prev), b = vv(next); const g = gaps().filter((x) => x > Math.min(a, b) && x < Math.max(a, b)); if (g.length) put(g[0]); }
-    if (!placed && !prev && min - 1 >= lo) { min--; put(min); }
-    if (!placed && !next && max + 1 <= hi) { max++; put(max); }
-    if (!placed) { const g = gaps(); if (g.length) put(g[0]); }
-    if (!placed) { if (max + 1 <= hi) { max++; put(max); } else { min--; put(min); } }
+  const put = (j, x) => slots.set(x, { c: j, as: { r: show(x), s: suit } });
+  // 1) luknje v nizu so obvezne: zapolni jih najprej, vsako z jokerjem, ki je bil kliknjen najbliže tej luknji
+  const gaps = []; for (let x = min + 1; x < max; x++) if (!slots.has(x)) gaps.push(x);
+  const left = [...jok];
+  const posOf = (c) => cards.indexOf(c);
+  for (const g of gaps) {
+    if (!left.length) break;
+    const below = nat.filter((c) => vv(c) < g).sort((a, b) => vv(b) - vv(a))[0];
+    const above = nat.filter((c) => vv(c) > g).sort((a, b) => vv(a) - vv(b))[0];
+    const between = left.filter((j) => posOf(j) > posOf(below) && posOf(j) < posOf(above));
+    const pick = between[0] || left.sort((a, b) => Math.abs(posOf(a) - posOf(above)) - Math.abs(posOf(b) - posOf(above)))[0];
+    left.splice(left.indexOf(pick), 1); put(pick, g);
+  }
+  // 2) preostali jokerji: pred prvo naravno karto = navzdol, sicer navzgor; če ni prostora, na drugo stran
+  const firstNat = Math.min(...nat.map(posOf));
+  for (const j of left) {
+    const wantLo = posOf(j) < firstNat;
+    if (wantLo && min - 1 >= lo) { min--; put(j, min); }
+    else if (!wantLo && max + 1 <= hi) { max++; put(j, max); }
+    else if (max + 1 <= hi) { max++; put(j, max); }
+    else { min--; put(j, min); }
   }
   return [...slots.keys()].sort((a, b) => a - b).map((k) => slots.get(k));
 }
@@ -79,7 +87,7 @@ export function tableVal(x) {
 export function newGame(players, turnTime, goal) {
   return {
     round: 0, deck: [], discard: [], melds: [], rounds: [],
-    players: players.map((p, i) => ({ id: p.user_id, name: p.name, seat: i, hand: [], opened: false, score: 0, ready: false })),
+    players: players.map((p, i) => ({ id: p.user_id, name: p.name, seat: i, hand: [], opened: false, score: 0, ready: false, bot: !!p.is_bot })),
     turn: 0, phase: 'lobby', turnStarted: 0, paused: false, pausedAt: 0, turnTime, goal,
     turnsInRound: 0, starter: 0, drawnTop: null, log: [], status: 'playing', winner: null, roundEnd: null, roundStartedAt: 0,
   };
@@ -87,7 +95,7 @@ export function newGame(players, turnTime, goal) {
 export function startRound(g, now) {
   g.round++; g.deck = newDeck(); g.melds = []; g.roundEnd = null; g.turnsInRound = 0; g.drawnTop = null;
   g.players.forEach((p) => { p.hand = []; p.opened = false; p.ready = false; });
-  for (let i = 0; i < 6; i++) g.players.forEach((p) => p.hand.push(g.deck.pop()));
+  for (let i = 0; i < 7; i++) g.players.forEach((p) => p.hand.push(g.deck.pop()));
   g.discard = [g.deck.pop()];
   g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now;
   g.log.push({ t: now, m: 'Runda ' + g.round + ' se začne. Začne ' + g.players[g.turn].name + '.' });
@@ -124,7 +132,8 @@ export function act(g, seat, a, now) {
       if (g.phase !== 'play') err('Najprej potegni karto.');
       const ids = a.ids || []; if (new Set(ids).size !== ids.length) err('Podvojene karte.');
       const cs = ids.map(hand); const v = validate(cs); if (!v) err('Izbor ni veljavna kombinacija.');
-      if (p.hand.length - cs.length < 1) err('Eno karto moraš obdržati za zavreči.');
+      const keep = g.turnsInRound < g.players.length ? 2 : 1;
+      if (p.hand.length - cs.length < keep) err(keep === 2 ? 'V prvem krogu ne moreš iti ven: obdrži vsaj 2 karti.' : 'Eno karto moraš obdržati za zavreči.');
       g.melds.push({ owner: seat, cards: arrange(cs, v).map((x) => ({ c: x.c.id, by: seat, as: x.as })) });
       ids.forEach(remove); p.opened = true; g.log.push({ t: now, m: p.name + ' je položil: ' + v.label + '.' }); return;
     }
@@ -140,7 +149,8 @@ export function act(g, seat, a, now) {
         m.cards[opt.swap] = { c: card.id, by: old.by, as: null }; remove(card.id); p.hand.push(joker);
         g.log.push({ t: now, m: p.name + ' je s ' + card.id + ' zamenjal jokerja pri ' + g.players[m.owner].name + '.' }); return;
       }
-      if (p.hand.length - 1 < 1) err('Eno karto moraš obdržati za zavreči.');
+      const keepA = g.turnsInRound < g.players.length ? 2 : 1;
+      if (p.hand.length - 1 < keepA) err(keepA === 2 ? 'V prvem krogu ne moreš iti ven: obdrži vsaj 2 karti.' : 'Eno karto moraš obdržati za zavreči.');
       const arr = a.side === 'lo' && opt.lo ? opt.lo.arr : a.side === 'hi' && opt.hi ? opt.hi.arr : opt.auto;
       m.cards = arr.map((x) => { const o = m.cards.find((y) => y.c === x.c.id); return { c: x.c.id, by: o ? o.by : seat, as: x.as }; });
       remove(card.id); g.log.push({ t: now, m: p.name + ' je dodal ' + card.id + ' k ' + g.players[m.owner].name + '.' }); return;
@@ -151,7 +161,7 @@ export function act(g, seat, a, now) {
       const onlyJokers = p.hand.every((c) => isJ(c));
       if (isJ(card) && !onlyJokers) err('Jokerja (dvojke) ne moreš zavreči.');
       if (p.hand.length === 1 && g.turnsInRound < g.players.length) err('V prvem krogu ne moreš zaključiti runde.');
-      remove(card.id); g.discard.push(card.id); g.log.push({ t: now, m: p.name + ' je zavrgel ' + card.id + '.' });
+      remove(card.id); g.discard.push(card.id); g.log.push({ t: now, m: p.name + ' je zavrgel karto.' });
       if (!p.hand.length) return endRound(g, seat, now);
       return nextTurn(g, now);
     }
@@ -170,7 +180,7 @@ export function autoMove(g, now) {
   const d = pool[Math.floor(Math.random() * pool.length)];
   if (cantFinish) { g.log.push({ t: now, m: 'Čas je potekel, ' + p.name + ' je preskočil potezo.' }); return nextTurn(g, now); }
   p.hand.splice(p.hand.indexOf(d), 1); g.discard.push(d);
-  g.log.push({ t: now, m: 'Čas je potekel, app je za ' + p.name + ' zavrgel ' + d + '.' });
+  g.log.push({ t: now, m: 'Čas je potekel, app je za ' + p.name + ' zavrgel karto.' });
   if (!p.hand.length) return endRound(g, g.turn, now);
   nextTurn(g, now);
 }
@@ -189,10 +199,10 @@ function endRound(g, winnerSeat, now) {
   rows.forEach((r) => { g.players[r.seat].score += r.sum; });
   g.rounds.push(rows.map((r) => r.sum));
   g.roundEnd = { round: g.round, winner: winnerSeat, rows, at: now };
-  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = false));
+  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = !!p.bot));
   g.log.push({ t: now, m: g.players[winnerSeat].name + ' je šel ven. Konec runde ' + g.round + '.' });
   const over = g.players.filter((p) => p.score >= g.goal);
-  if (over.length) { const w = over.sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.log.push({ t: now, m: w.name + ' je zmagal igro s ' + w.score + ' točkami!' }); }
+  if (over.length) { const w = over.sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.finishedNaturally = true; g.log.push({ t: now, m: w.name + ' je zmagal igro s ' + w.score + ' točkami!' }); }
 }
 function ready(g, seat, now) {
   if (g.phase !== 'roundEnd') err('Runda še teče.');
@@ -205,10 +215,33 @@ export function view(g, seat, now) {
   const me = g.players.find((p) => p.seat === seat);
   return {
     round: g.round, phase: g.phase, status: g.status, winner: g.winner, turn: g.turn, turnStarted: g.turnStarted, turnTime: g.turnTime, goal: g.goal,
-    paused: g.paused, now, deckCount: g.deck.length, discard: g.discard.slice(-3), discardCount: g.discard.length, drawnTop: g.drawnTop,
+    paused: g.paused, now, deckCount: g.deck.length, discard: g.discard.slice(-1), discardCount: g.discard.length, drawnTop: g.drawnTop,
     melds: g.melds, rounds: g.rounds, roundEnd: g.roundEnd, roundStartedAt: g.roundStartedAt, log: g.log.slice(-12),
     turnsInRound: g.turnsInRound, playersCount: g.players.length,
-    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready })),
+    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot })),
     me: me ? { seat: me.seat, hand: me.hand, opened: me.opened } : null,
   };
+}
+
+/* ===== testni bot: odigra eno potezo, če je na vrsti in je minilo vsaj 1,2 s ===== */
+export function botStep(g, now) {
+  if (g.status !== 'playing' || g.phase === 'roundEnd' || g.paused) return false;
+  const p = cur(g); if (!p.bot || now - g.turnStarted < 1200) return false;
+  try {
+    if (g.phase === 'draw') act(g, g.turn, { type: 'draw', from: 'deck' }, now);
+    // položi vse veljavne trojke, dokler ostane vsaj 1 karta za zavreči
+    let laid = true;
+    while (laid) { laid = false; const h = p.hand.map(parse);
+      for (let a = 0; a < h.length && !laid; a++) for (let b = a + 1; b < h.length && !laid; b++) for (let c = b + 1; c < h.length && !laid; c++) {
+        const cs = [h[a], h[b], h[c]]; if (validate(cs) && p.hand.length - 3 >= (g.turnsInRound < g.players.length ? 2 : 1)) { act(g, g.turn, { type: 'lay', ids: cs.map((x) => x.id) }, now); laid = true; } } }
+    // dodaj karte v kombinacije, če je odprt
+    if (p.opened) { let added = true; while (added) { added = false;
+      for (const id of [...p.hand]) { if (p.hand.length <= (g.turnsInRound < g.players.length ? 2 : 1)) break; for (let mi = 0; mi < g.melds.length && !added; mi++) {
+        const mm = { cards: g.melds[mi].cards.map((x) => ({ c: parse(x.c), by: x.by, as: x.as })) }; if (addOptions(mm, parse(id))) { try { act(g, g.turn, { type: 'add', meld: mi, id }, now); added = true; } catch (_e) { /* ni šlo */ } } } if (added) break; } } }
+    const nonJ = p.hand.filter((c) => !isJ(c)); const pool = nonJ.length ? nonJ : p.hand;
+    const cantFinish = p.hand.length === 1 && g.turnsInRound < g.players.length;
+    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; return true; }
+    act(g, g.turn, { type: 'discard', id: pool[Math.floor(Math.random() * pool.length)] }, now);
+  } catch (e) { g.log.push({ t: now, m: 'Bot ' + p.name + ' napaka: ' + e.message }); autoMove(g, now); }
+  return true;
 }

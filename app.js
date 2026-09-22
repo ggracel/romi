@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=4';
+import * as E from './engine.js?v=5';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -11,7 +11,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const red = (s) => s === '♥' || s === '♦';
 
 /* ================= stanje klienta ================= */
-const S = { user: null, rooms: [], room: null, players: [], view: null, sel: new Set(), order: [], sort: 'suit', offset: 0, busy: false, lastLogLen: 0, prevTurn: null, prevRound: 0 };
+const S = { user: null, rooms: [], room: null, players: [], view: null, sel: new Set(), order: [], sort: 'rank', offset: 0, handOrder: [], busy: false, lastLogLen: 0, prevTurn: null, prevRound: 0 };
 
 /* ================= transport ================= */
 let sb = null, api, subscribeRooms, subscribeRoom, unsubscribeRoom, auth;
@@ -93,7 +93,15 @@ function cardEl(c, cls = '', as = null) {
   return e;
 }
 function backEl() { const e = document.createElement('div'); e.className = 'card back'; e.innerHTML = '<i class="q"></i>'; return e; }
-function sortHand(h, mode) { const key = mode === 'rank' ? (c) => E.RV(c) * 10 + E.SUITS.indexOf(c.s) : (c) => E.SUITS.indexOf(c.s) * 20 + E.RV(c); return [...h].sort((a, b) => key(a) - key(b)); }
+const RVH = (c) => (E.RV(c) === 1 ? 14 : E.RV(c)); // As je najvišji
+function sortHand(h, mode) { const key = mode === 'rank' ? (c) => RVH(c) * 10 + E.SUITS.indexOf(c.s) : (c) => E.SUITS.indexOf(c.s) * 20 + RVH(c); return [...h].sort((a, b) => key(a) - key(b)); }
+/* vrstni red kart v roki: uporabnik ga lahko premika z miško; nove karte gredo na konec */
+function handOrdered(hand) {
+  const ids = hand.map((c) => c.id); S.handOrder = (S.handOrder || []).filter((id) => ids.includes(id));
+  for (const id of ids) if (!S.handOrder.includes(id)) S.handOrder.push(id);
+  return S.handOrder.map((id) => hand.find((c) => c.id === id));
+}
+function applySort(mode) { const v = S.view; if (!v) return; S.handOrder = sortHand(v.me.hand.map(parse), mode).map((c) => c.id); render(); }
 
 /* ================= prijava ================= */
 async function boot() {
@@ -118,7 +126,7 @@ async function loadRooms() {
   renderRooms();
 }
 async function enterLobby() {
-  show('lobby'); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
+  show('lobby'); loadLeaderboard(); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
   // če sem že v sobi (npr. osvežitev strani), me vrni vanjo
   const mine = S.allPlayers.find((p) => p.user_id === S.user.id); const r = mine && S.rooms.find((x) => x.id === mine.room_id);
   if (r) enterRoom(r);
@@ -215,15 +223,16 @@ function render(prev) {
   $('#gRound').textContent = v.round; $('#gGoal').textContent = v.goal;
   $('#scores').innerHTML = v.players.map((p) => `<span class="chip"><i style="background:${COLORS[p.seat]}">${ini(p.name)}</i>${esc(p.name)} <em>${p.score}</em></span>`).join('');
   $('#deckN').textContent = v.deckCount + ' kart'; $('#disN').textContent = v.discardCount + ' kart';
-  const ds = $('#disStack'); ds.innerHTML = ''; v.discard.forEach((c) => ds.appendChild(cardEl(c)));
+  const ds = $('#disStack'); ds.innerHTML = ''; for (let k = 0; k < Math.min(2, v.discardCount - 1); k++) { const b = document.createElement('div'); b.className = 'card blank'; ds.appendChild(b); } v.discard.forEach((c) => ds.appendChild(cardEl(c)));
+  $('#bAll').hidden = !(myTurn && v.phase === 'draw' && v.discardCount > 1); $('#bAllN').textContent = v.discardCount;
   const hot = myTurn && v.phase === 'draw'; $('#pDeck').classList.toggle('hot', hot); $('#pDis').classList.toggle('hot', hot);
   const map = seatMap();
   $$('.zone').forEach((z) => { const seat = map[z.dataset.z]; if (seat === undefined) { z.hidden = true; return; } z.hidden = false; const p = v.players[seat];
     z.classList.toggle('turn', v.turn === seat && v.phase !== 'roundEnd');
-    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 8) }, () => '<div class="card back"></div>').join('') + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
+    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 14) }, () => '<div class="card back"></div>').join('') + '<b class="fan-n">' + p.handCount + '</b>' + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
     const zm = z.querySelector('.zm'); const mine = v.melds.map((m, i) => [m, i]).filter(([m]) => m.owner === seat);
     if (!mine.length) zm.innerHTML = '<div class="none">' + (seat === v.me.seat ? 'Še nisi odprt. Izberi 3+ kart in klikni Položi.' : 'Še ni odprt') + '</div>';
-    mine.forEach(([m, i]) => { const e = document.createElement('div'); e.className = 'meld'; e.dataset.mi = i;
+    mine.forEach(([m, i]) => { const e = document.createElement('div'); e.className = 'meld'; e.dataset.mi = i; e.dataset.n = m.cards.length; const cs4 = m.cards.map((x) => parse(x.c)); const vv = validate(cs4); if (vv && vv.type === 'set' && m.cards.length === 4) e.classList.add('complete'); if (vv && vv.type === 'run' && m.cards.length >= 10) e.classList.add('complete');
       const opt = myTurn && v.phase === 'play' && cs.length === 1 && (v.me.opened || true) ? addOptions(meldObj(m), cs[0]) : null; if (opt) e.classList.add('can');
       m.cards.forEach((x, k) => { const ce = cardEl(x.c, x.by !== m.owner ? 'added' : '', x.as); if (x.by !== m.owner) ce.style.setProperty('--who', COLORS[x.by]);
         if (opt && opt.swap === k) { ce.classList.add('swap'); const sp = document.createElement('button'); sp.className = 'pad sw'; sp.dataset.side = 'swap'; sp.innerHTML = '⇄<small>zamenjaj</small>'; sp.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'swap'); }; ce.appendChild(sp); }
@@ -239,15 +248,16 @@ function render(prev) {
   });
   // roka
   const h = $('#hand'); const before = new Map(); $$('#hand .card').forEach((e) => before.set(e.dataset.id, e.getBoundingClientRect()));
-  h.innerHTML = ''; sortHand(v.me.hand.map(parse), S.sort).forEach((c) => { const e = cardEl(c, S.sel.has(c.id) ? 'sel' : ''); const o = document.createElement('span'); o.className = 'ord'; o.textContent = S.order.indexOf(c.id) + 1; e.appendChild(o); e.onclick = () => toggleSel(c.id); h.appendChild(e); });
+  h.innerHTML = ''; handOrdered(v.me.hand.map(parse)).forEach((c) => { const e = cardEl(c, S.sel.has(c.id) ? 'sel' : ''); const o = document.createElement('span'); o.className = 'ord'; o.textContent = S.order.indexOf(c.id) + 1; e.appendChild(o); e.onclick = () => toggleSel(c.id); h.appendChild(e); });
   flipHand(before, prev);
   // predogled
   const pv = $('#prev');
   if (cs.length >= 2) { const arr = arrange(cs, val3); pv.className = 'prev on ' + (val3 ? '' : 'bad');
     pv.innerHTML = val3 ? `<span class="lab">${val3.label}</span>` + arr.map((x) => x.as ? `<span class="pc j">2 = ${x.as.r}${x.as.s !== '?' ? x.as.s : ''}</span>` : `<span class="pc ${red(x.c.s) ? 'red' : ''}">${x.c.r}${x.c.s}</span>`).join('') : `<span class="lab">Ni veljavno</span>` + cs.map((c) => `<span class="pc ${red(c.s) ? 'red' : ''}">${c.r}${c.s}</span>`).join(''); }
   else pv.className = 'prev';
-  const canLay = myTurn && v.phase === 'play' && val3 && v.me.hand.length - cs.length >= 1;
-  $('#bLay').disabled = !canLay; $('#bLay').title = myTurn && v.phase === 'play' && val3 && !canLay ? 'Eno karto moraš obdržati za zavreči' : '';
+  const keep = v.turnsInRound < v.playersCount ? 2 : 1;
+  const canLay = myTurn && v.phase === 'play' && val3 && v.me.hand.length - cs.length >= keep;
+  $('#bLay').disabled = !canLay; $('#bLay').title = myTurn && v.phase === 'play' && val3 && !canLay ? (keep === 2 ? 'V prvem krogu ne moreš iti ven: obdrži vsaj 2 karti' : 'Eno karto moraš obdržati za zavreči') : '';
   const onlyJ = v.me.hand.every((c) => isJ(c)); const lastCardBlocked = v.me.hand.length === 1 && v.turnsInRound < v.playersCount;
   const canDis = myTurn && v.phase === 'play' && cs.length === 1 && (!isJ(cs[0]) || onlyJ) && !lastCardBlocked;
   $('#bDis').disabled = !canDis; $('#bDis').title = cs.length === 1 && isJ(cs[0]) && !onlyJ ? 'Jokerja ne moreš zavreči' : lastCardBlocked && cs.length === 1 ? 'V prvem krogu ne moreš zaključiti runde' : '';
@@ -261,7 +271,7 @@ function render(prev) {
   $('#miniLog').innerHTML = v.log.slice(-4).map((l) => `<div>${esc(l.m)}</div>`).join('');
   // obvestila ob spremembi poteze / runde
   if (prev && prev.turn !== v.turn && myTurn) banner('Ti si na potezi');
-  if (v.round >= 1 && v.phase !== 'roundEnd' && S.dealtRound !== v.round) { S.dealtRound = v.round; setTimeout(() => dealAnim(), 250); }
+  if (v.round >= 1 && v.phase !== 'roundEnd' && S.dealtRound !== v.round) { S.dealtRound = v.round; S.handOrder = sortHand(v.me.hand.map(parse), S.sort).map((c) => c.id); render(); setTimeout(() => dealAnim(), 250); return; }
   if (prev && prev.log.length && v.log.length && v.log[v.log.length - 1].m !== prev.log[prev.log.length - 1].m) { const last = v.log[v.log.length - 1].m; if (!last.startsWith(myName())) toast(last); }
 }
 function banner(t) { const b = document.createElement('div'); b.className = 'turn-banner'; b.textContent = t; document.body.appendChild(b); setTimeout(() => b.remove(), 1700); }
@@ -288,10 +298,10 @@ async function doDiscard() { const cs = selCards(); if (cs.length !== 1) return 
   if (el) el.style.visibility = 'hidden';
   const p = from ? fly(cardEl(cs[0]), from, { x: to.x + 6, y: to.y - 6, w: from.w, h: from.h }, { rot: 12, dur: 420 }) : Promise.resolve();
   const r = await call({ action: 'discard', id: cs[0].id }); await p; if (!r && el) el.style.visibility = ''; }
-$('#pDeck').onclick = () => doDraw('deck'); $('#disStack').onclick = () => doDraw('top');
+$('#pDeck').onclick = () => doDraw('deck'); $('#disStack').onclick = () => doDraw('top'); $('#bAll').onclick = () => doDraw('all');
 $$('#pDis .split button').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); doDraw(b.dataset.from); }));
 $('#bLay').onclick = doLay; $('#bDis').onclick = doDiscard;
-$('#bSort').onclick = () => { S.sort = S.sort === 'suit' ? 'rank' : 'suit'; render(); };
+$('#bSort').onclick = () => { S.sort = S.sort === 'rank' ? 'suit' : 'rank'; applySort(S.sort); toast(S.sort === 'rank' ? 'Razvrščeno po vrednosti' : 'Razvrščeno po barvi'); };
 $('#bPause').onclick = () => call({ action: S.view?.paused ? 'resume' : 'pause' }); $('#bResume').onclick = () => call({ action: 'resume' });
 $('#bEnd').onclick = () => { if (confirm('Res končaš igro za vse?')) call({ action: 'end' }); };
 $('#bLog').onclick = () => showLog(false);
@@ -310,7 +320,7 @@ function showLog(auto) {
   const all = v.rounds; const tot = v.players.map((p) => p.score); const lead = Math.max(...tot);
   $('#pts').innerHTML = `<thead><tr><th>Runda</th>${v.players.map((p) => `<th class="num"><i class="dot" style="background:${COLORS[p.seat]}"></i>${esc(p.name)}</th>`).join('')}</tr></thead><tbody>${all.length ? all.map((r, i) => `<tr class="${i === all.length - 1 && v.phase === 'roundEnd' ? 'cur' : ''}"><td>${i + 1}</td>${r.map((n) => `<td class="num">${f(n)}</td>`).join('')}</tr>`).join('') : '<tr><td colspan="5" class="small-note">Prva runda še teče.</td></tr>'}</tbody><tfoot><tr><td>Skupaj <small>/ ${v.goal}</small></td>${tot.map((n) => `<td class="num ${n === lead && all.length ? 'lead' : ''}">${n}</td>`).join('')}</tr></tfoot>`;
   const mini = (cs) => cs.length ? cs.map((c) => cardEl(c, 'xs').outerHTML).join('') : '<em>nič</em>';
-  $('#cards').innerHTML = re ? re.rows.map((r) => { const p = v.players[r.seat]; return `<div class="cr"><div class="cr-h"><i class="dot" style="background:${COLORS[r.seat]}"></i><b>${esc(p.name)}</b><span class="mono">${f(r.table)} miza · ${f(-r.hand)} roka</span><b class="cr-sum ${r.sum >= 0 ? 'pos' : 'neg'}">${r.sum > 0 ? '+' : ''}${r.sum}</b></div><div class="cr-l"><span class="mono">Miza</span><div class="cs">${mini(r.tableCards)}</div></div><div class="cr-l"><span class="mono">Roka</span><div class="cs">${mini(r.handCards)}</div></div></div>`; }).join('') : '<p class="small-note">Karte se pokažejo ob koncu runde.</p>';
+  $('#cards').innerHTML = re ? re.rows.map((r) => { const p = v.players[r.seat]; return `<div class="cr"><div class="cr-h"><i class="dot" style="background:${COLORS[r.seat]}"></i><b>${esc(p.name)}</b><span class="mono">${f(r.table)} miza · ${f(-r.hand)} roka</span><b class="cr-sum ${r.hand ? 'neg' : 'pos'}">${r.hand ? '-' + r.hand : '0'} v roki</b></div><div class="cr-l"><span class="mono">Miza</span><div class="cs">${mini(r.tableCards)}</div></div><div class="cr-l"><span class="mono">Roka</span><div class="cs">${mini(r.handCards)}</div></div></div>`; }).join('') : '<p class="small-note">Karte se pokažejo ob koncu runde.</p>';
   const rn = v.players.filter((p) => p.ready).length; $('#readyN').textContent = rn; $('#readyT').textContent = v.players.length;
   const inEnd = v.phase === 'roundEnd' && v.status === 'playing';
   $('#readys').innerHTML = inEnd ? v.players.map((p) => `<button class="ready ${p.ready ? 'on' : ''}" ${p.seat === v.me.seat && !p.ready ? 'data-me="1"' : 'disabled'}>${p.seat === v.me.seat ? 'Ti · Ready' : esc(p.name) + (p.bot ? ' (bot)' : '')}</button>`).join('') : '';
@@ -345,16 +355,31 @@ function dealAnim() {
     if (!drag.moved) { if (Math.hypot(dx, dy) < 8) return; drag.moved = true; S.sel.clear(); S.order = []; toggleSel(drag.id);
       const el = $(`#hand .card[data-id="${CSS.escape(drag.id)}"]`); const r = el.getBoundingClientRect(); drag.ox = e.clientX - r.left; drag.oy = e.clientY - r.top; drag.ghost = el.cloneNode(true); drag.ghost.classList.add('ghost', 'drag'); drag.ghost.classList.remove('sel'); drag.ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:90;pointer-events:none;transform:rotate(-4deg) scale(1.05)`; document.body.appendChild(drag.ghost); el.style.visibility = 'hidden'; document.body.classList.add('dragging'); }
     drag.ghost.style.left = (e.clientX - drag.ox) + 'px'; drag.ghost.style.top = (e.clientY - drag.oy) + 'px';
-    $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const t = document.elementFromPoint(e.clientX, e.clientY); const tgt = t && (t.closest('.pad') || t.closest('.meld.can') || t.closest('#pDis')); if (tgt) tgt.classList.add('drop-over'); });
+    $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const t = document.elementFromPoint(e.clientX, e.clientY); const tgt = t && (t.closest('.pad') || t.closest('.meld.can') || t.closest('#pDis') || (t.closest('#hand .card') && t.closest('#hand .card').dataset.id !== drag.id ? t.closest('#hand .card') : null)); if (tgt) tgt.classList.add('drop-over'); });
   document.addEventListener('pointerup', (e) => { if (!drag) return; const d = drag; drag = null; if (!d.moved) return;
     d.ghost.remove(); document.body.classList.remove('dragging'); $$('.drop-over').forEach((x) => x.classList.remove('drop-over'));
     const el = $(`#hand .card[data-id="${CSS.escape(d.id)}"]`); if (el) el.style.visibility = '';
     const t = document.elementFromPoint(e.clientX, e.clientY); if (!t) return;
     const pad = t.closest('.pad'); const meld = t.closest('.meld'); const dis = t.closest('#pDis');
-    if (pad && meld) doAdd(+meld.dataset.mi, pad.dataset.side); else if (meld && meld.classList.contains('swapable')) doAdd(+meld.dataset.mi, 'swap'); else if (meld && meld.classList.contains('can')) doAdd(+meld.dataset.mi); else if (dis && !$('#bDis').disabled) doDiscard(); });
+    const hc = t.closest('#hand .card');
+    if (pad && meld) doAdd(+meld.dataset.mi, pad.dataset.side); else if (meld && meld.classList.contains('swapable')) doAdd(+meld.dataset.mi, 'swap'); else if (meld && meld.classList.contains('can')) doAdd(+meld.dataset.mi); else if (dis && !$('#bDis').disabled) doDiscard();
+    else if (hc && hc.dataset.id !== d.id) { const r = hc.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; const o = S.handOrder.filter((x) => x !== d.id); let idx = o.indexOf(hc.dataset.id) + (after ? 1 : 0); o.splice(idx, 0, d.id); S.handOrder = o; S.sel.clear(); S.order = []; render(); }
+    else if (t.closest('#hand') || t.closest('.me')) { S.sel.clear(); S.order = []; render(); } });
 })();
 /* ozadje: poligoni, nariše se enkrat */
 function drawBg() { const c = $('#bg canvas'), x = c.getContext('2d'); function d() { c.width = innerWidth; c.height = innerHeight; x.clearRect(0, 0, c.width, c.height); const pts = []; for (let i = 0; i < 70; i++) pts.push([Math.random() * c.width, Math.random() * c.height]); x.strokeStyle = 'rgba(70,190,197,.07)'; x.lineWidth = 1; pts.forEach((p, i) => { pts.slice(i + 1).forEach((q) => { const dd = Math.hypot(p[0] - q[0], p[1] - q[1]); if (dd < 190) { x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(q[0], q[1]); x.stroke(); } }); }); } d(); addEventListener('resize', d); }
 
 boot();
 window.__S = S;
+
+/* ================= lestvica ================= */
+async function loadLeaderboard() {
+  const el = $('#lbBody'); if (!el) return;
+  let rows = [];
+  if (MOCK) rows = [{ name: 'Gašper', points: 1240, games: 6, wins: 3 }, { name: 'Jaka', points: 980, games: 6, wins: 2 }, { name: 'Nejc', points: 410, games: 3, wins: 1 }];
+  else { const { data } = await sb.from('romi_stats').select('*').order('points', { ascending: false }).limit(20); rows = data || []; }
+  if (!rows.length) { el.innerHTML = '<span class="small-note">Še ni zaključenih iger. Štejejo samo igre, odigrane do 500 točk.</span>'; return; }
+  el.innerHTML = '<table class="lbt"><thead><tr><th>#</th><th>Igralec</th><th class="num">Točke</th><th class="num">Igre</th><th class="num">Zmage</th></tr></thead><tbody>' + rows.map((r, i) => `<tr class="${r.user_id === S.user?.id ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.points}</td><td class="num">${r.games}</td><td class="num">${r.wins}</td></tr>`).join('') + '</tbody></table><p class="small-note" style="margin-top:10px">Štejejo samo igre, odigrane do konca (500 točk).</p>';
+}
+
+window.__call = call;

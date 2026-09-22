@@ -131,7 +131,14 @@ Deno.serve(async (req) => {
       if (!changed) { E.act(g, seat, { type: action, ...body }, now); changed = true; }
       else if (action !== "ready") throw ue("Čas je potekel, poteza je bila odigrana samodejno.");
     }
-    if (changed) await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
+    if (changed) {
+      // globalna lestvica: samo naravno zaključene igre, enkrat
+      if (g.status === "finished" && g.finishedNaturally && !g.statsDone) {
+        g.statsDone = true;
+        await Promise.all(g.players.filter((p) => !p.bot).map((p) => admin.rpc("romi_add_stat", { p_user: p.id, p_name: p.name, p_points: p.score, p_win: p.seat === g.winner })));
+      }
+      await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
+    }
     return ok({ view: E.view(g, seat, now) });
   } catch (e) {
     const msg = e?.user ? e.message : "Napaka na strežniku: " + (e?.message || e);

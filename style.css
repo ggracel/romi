@@ -359,3 +359,54 @@ body.dragging .hand .card:hover{transform:none}
 .brand-t.sm{font-size:19px}
 body.wait{cursor:progress}
 body.wait .btn{opacity:.7}
+/* ================= v5: vecje karte, prostor na webu ================= */
+:root{--cw:84px;--ch:118px}
+.meld .card{--cw:60px;--ch:84px}
+.hand{height:calc(var(--ch) + 34px);padding-top:30px}
+.hand .card+.card{margin-left:-18px}
+.me{padding:8px 40px 20px}
+.zh .fan .card{--cw:30px;--ch:42px;border-radius:5px}
+.zh .fan .card+.card{margin-left:-19px}
+.zh .fan{position:relative;padding-right:22px}
+.fan-n{position:absolute;right:-2px;top:50%;transform:translateY(-50%);font:700 12px var(--mono);color:var(--fg);background:var(--ink);border:1px solid var(--line2);border-radius:99px;padding:2px 7px}
+.zone{min-height:150px}
+/* 3: piki samo na vrhnji karti kupa */
+.pile .stack .card.back:not(:last-child)::after,.pile .stack .card.back:not(:last-child) .q{display:none}
+/* prazne karte pod vrhnjo odlozeno (ne razkrijejo nicesar) */
+.card.blank{background:linear-gradient(165deg,#e9e6e0,#d9d5cd);box-shadow:0 0 0 1px rgba(0,0,0,.3),0 6px 14px rgba(0,0,0,.4)}
+.card.blank::before{display:none}
+/* 7: vzemi vse */
+.take-all{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 16px 12px;border-radius:16px;border:1px solid rgba(70,190,197,.55);background:rgba(70,190,197,.1);color:var(--teal);font:700 12px var(--mono);letter-spacing:.1em;text-transform:uppercase;cursor:pointer;animation:takePulse 1.6s ease-in-out infinite;transition:background .2s,transform .2s}
+.take-all svg{width:30px;height:30px}
+.take-all b{display:block;font-size:16px;letter-spacing:0;color:var(--fg);margin-top:2px}
+.take-all:hover{background:rgba(70,190,197,.22);transform:translateY(-2px);animation:none}
+@keyframes takePulse{0%,100%{box-shadow:0 0 0 0 rgba(70,190,197,.35)}50%{box-shadow:0 0 0 10px rgba(70,190,197,0)}}
+.center{gap:28px}
+/* 9: dolge kombinacije se stisnejo, ne gredo cez rob */
+.meld[data-n="5"] .card+.card,.meld[data-n="6"] .card+.card{margin-left:calc(var(--cw) * -.52)}
+.meld[data-n="7"] .card+.card,.meld[data-n="8"] .card+.card{margin-left:calc(var(--cw) * -.58)}
+.meld[data-n="9"] .card+.card,.meld[data-n="10"] .card+.card,.meld[data-n="11"] .card+.card,.meld[data-n="12"] .card+.card,.meld[data-n="13"] .card+.card{margin-left:calc(var(--cw) * -.64)}
+.meld{max-width:100%}
+.zm{max-width:100%}
+/* 11: joker obdrzi barvo svoje barve v vogalih */
+.card.joker.red .ix{color:#c22b3a}
+.card.joker:not(.red) .ix{color:#1c1a1b}
+/* 12: komplet (set 4 ali dolg niz): tiho lesketanje robu, brez teksta */
+.meld.complete{border-color:transparent;background:rgba(70,190,197,.06)}
+.meld.complete::before{content:"";position:absolute;inset:-1px;border-radius:12px;padding:1px;background:conic-gradient(from var(--ang,0deg),rgba(70,190,197,0) 0%,var(--teal) 25%,rgba(232,180,99,.9) 50%,var(--teal) 75%,rgba(70,190,197,0) 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spinRing 3s linear infinite;pointer-events:none}
+@property --ang{syntax:'<angle>';inherits:false;initial-value:0deg}
+@keyframes spinRing{to{--ang:360deg}}
+/* roka: premik z miško */
+#hand .card.drop-over{outline-color:var(--teal);transform:translateY(-8px) scale(1.04)}
+/* 13: lestvica v lobbyju */
+.lobby-grid{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
+.lb{border:1px solid var(--line);border-radius:16px;padding:16px 18px;background:rgba(26,22,23,.8)}
+.lb-h{margin-bottom:10px}
+.lbt{width:100%;border-collapse:collapse;font-size:13px}
+.lbt th{font:600 9.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mute);text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+.lbt td{padding:8px 4px;border-bottom:1px solid var(--line)}
+.lbt .num{text-align:right;font-family:var(--mono)}
+.lbt tr.me td{color:var(--teal)}
+.lobby-in{width:min(1240px,94vw)}
+
+.mock-tag{position:fixed;left:16px;bottom:8px;z-index:200;font:600 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--teal);background:var(--ink);border:1px solid var(--line2);padding:3px 10px;border-radius:99px;pointer-events:none}

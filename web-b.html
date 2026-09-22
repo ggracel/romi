@@ -3,15 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>foqs.romi</title>
+<title>foqs.romi · predlog B · Fokus</title>
 <meta name="description" content="Romi - online kartna igra za prijatelje. Ena prijava za vse foqs. aplikacije.">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=5">
-</head>
-<body data-screen="boot">
+<style>
+/* PREDLOG B: fokus. Nasprotniki v enem kompaktnem pasu zgoraj (vsi trije v vrsti, njihove kombinacije pod imenom), sredina = tvoje kombinacije + kupa v eni veliki coni, roka spodaj velika. */
+:root{--cw:100px;--ch:140px}
+.table{grid-template-columns:1fr 1fr 1fr;grid-template-rows:minmax(240px,auto) 1fr;margin:12px 20px 0;padding:14px}
+.zone.z-left{grid-column:1;grid-row:1 / 2}
+.zone.z-top{grid-column:2;grid-row:1}
+.zone.z-right{grid-column:3;grid-row:1 / 2}
+.zone{min-height:110px}
+.zone .zm{justify-content:center}
+.center{grid-column:1;grid-row:2;flex-direction:column;justify-content:flex-start;padding-top:10px}
+.zone.z-me{grid-column:2/4;grid-row:2}
+.zone.z-me .zm{justify-content:flex-start}
+.meld .card{--cw:66px;--ch:92px}
+.hand .card+.card{margin-left:-10px}
+.me{padding:6px 20px 16px}
+</style></head>
+<body data-screen="boot"><div class="mock-tag">Predlog B · Fokus · odpri z ?mock=1</div>
 <div id="bg"><canvas></canvas></div>
 
 <!-- ============ PRIJAVA (enak videz kot hub na foqs.si) ============ -->
