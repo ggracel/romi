@@ -410,3 +410,15 @@ body.wait .btn{opacity:.7}
 .lobby-in{width:min(1240px,94vw)}
 
 .mock-tag{position:fixed;left:16px;bottom:8px;z-index:200;font:600 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--teal);background:var(--ink);border:1px solid var(--line2);padding:3px 10px;border-radius:99px;pointer-events:none}
+
+/* ================= v6: postavitev A · Široka miza ================= */
+:root{--cw:96px;--ch:134px}
+.game{grid-template-rows:1fr auto}
+.table{grid-template-columns:minmax(260px,.9fr) minmax(0,1.6fr) minmax(260px,.9fr);margin:12px 20px 0}
+.me{grid-template-columns:1fr 260px;padding:6px 20px 16px;gap:14px}
+.hand{justify-content:flex-start;padding-left:16px}
+.hand .card+.card{margin-left:-6px}
+.acts{min-width:0}
+.mini-log{position:static;width:auto;grid-column:1/-1;display:flex;flex-direction:row;gap:18px;padding:0 20px 8px;font-size:12px}
+.mini-log div{opacity:.6}
+.mini-log div:last-child{opacity:1}

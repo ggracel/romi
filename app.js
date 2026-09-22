@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=5';
+import * as E from './engine.js?v=6';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -53,13 +53,13 @@ if (!MOCK) {
     if (body.action === 'join') return { room: M.rooms[0] };
     if (body.action === 'leave') return {};
     if (body.action === 'kick') { M.players = M.players.filter((p) => p.user_id !== body.user_id); notify(); return {}; }
-    if (body.action === 'start') { M.game = E.newGame(M.players, M.rooms[0].turn_time, 500); M.game.starter = 0; E.startRound(M.game, now); M.rooms[0].status = 'playing'; notify(); botPlay(); return { view: E.view(M.game, 0, now) }; }
+    if (body.action === 'start') { M.game = E.newGame(M.players, M.rooms[0].turn_time, 500); M.game.starter = 0; E.startRound(M.game, now); M.rooms[0].status = 'playing'; notify(); botPlay(); return { view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'end') { M.game.status = 'finished'; M.rooms[0].status = 'finished'; notify(); return {}; }
     const g = M.game; if (!g) throw new Error('Igra še ni začeta.');
     if (body.action === 'pause') { g.paused = true; g.pausedAt = now; } else if (body.action === 'resume') { g.turnStarted += now - g.pausedAt; g.paused = false; botPlay(); }
-    else if (body.action === 'view' || body.action === 'tick') { if (E.checkTimeout(g, now)) { botPlay(); notify(); } return { view: E.view(g, 0, now) }; }
+    else if (body.action === 'view' || body.action === 'tick') { if (E.checkTimeout(g, now)) { botPlay(); notify(); } return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
     else { if (E.checkTimeout(g, now)) { botPlay(); throw new Error('Čas je potekel, poteza je bila odigrana samodejno.'); } E.act(g, 0, { type: body.action, ...body }, now); if (body.action === 'discard') botPlay(); if (g.phase === 'roundEnd') botsReady(); }
-    notify(); return { view: E.view(g, 0, now) }; };
+    notify(); return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; };
   auth = { async session() { return { id: 'me', email: 'gasper@foqs.si', user_metadata: { name: 'Gašper' } }; }, async login() { return this.session(); }, async logout() {} };
   subscribeRooms = (cb) => M.cbs.add(cb); subscribeRoom = (id, cb) => M.cbs.add(cb); unsubscribeRoom = () => {};
   window.__mock = M;
@@ -234,7 +234,7 @@ function render(prev) {
     if (!mine.length) zm.innerHTML = '<div class="none">' + (seat === v.me.seat ? 'Še nisi odprt. Izberi 3+ kart in klikni Položi.' : 'Še ni odprt') + '</div>';
     mine.forEach(([m, i]) => { const e = document.createElement('div'); e.className = 'meld'; e.dataset.mi = i; e.dataset.n = m.cards.length; const cs4 = m.cards.map((x) => parse(x.c)); const vv = validate(cs4); if (vv && vv.type === 'set' && m.cards.length === 4) e.classList.add('complete'); if (vv && vv.type === 'run' && m.cards.length >= 10) e.classList.add('complete');
       const opt = myTurn && v.phase === 'play' && cs.length === 1 && (v.me.opened || true) ? addOptions(meldObj(m), cs[0]) : null; if (opt) e.classList.add('can');
-      m.cards.forEach((x, k) => { const ce = cardEl(x.c, x.by !== m.owner ? 'added' : '', x.as); if (x.by !== m.owner) ce.style.setProperty('--who', COLORS[x.by]);
+      m.cards.forEach((x, k) => { const ce = cardEl(x.c, x.by !== m.owner ? 'added' : '', x.as); if (S.flying && S.flying.has(x.c)) ce.style.visibility = 'hidden'; if (x.by !== m.owner) ce.style.setProperty('--who', COLORS[x.by]);
         if (opt && opt.swap === k) { ce.classList.add('swap'); const sp = document.createElement('button'); sp.className = 'pad sw'; sp.dataset.side = 'swap'; sp.innerHTML = '⇄<small>zamenjaj</small>'; sp.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'swap'); }; ce.appendChild(sp); }
         e.appendChild(ce); });
       if (opt && opt.swap !== undefined) { e.classList.add('swapable'); e.onclick = () => doAdd(i, 'swap'); }
@@ -277,27 +277,40 @@ function render(prev) {
 function banner(t) { const b = document.createElement('div'); b.className = 'turn-banner'; b.textContent = t; document.body.appendChild(b); setTimeout(() => b.remove(), 1700); }
 
 /* ================= akcije ================= */
-async function doDraw(from) { const v = S.view; if (!v || v.turn !== v.me.seat) return toast('Nisi na potezi'); if (v.phase !== 'draw') return toast('Karto si že potegnil');
+async function doDraw(from) { const v = S.view; if (!v || v.turn !== v.me.seat) return toast('Nisi na potezi'); if (v.phase !== 'draw') return toast('Karto si že potegnil'); if (S.busy) return;
   const src = from === 'deck' ? $('#pDeck .stack') : $('#disStack'); const srcR = rectOf(src); const before = new Set(v.me.hand);
+  const hs = $$('#hand .card'); const last = hs[hs.length - 1]; const lr = last ? rectOf(last) : rectOf($('#hand')); const dest = { x: lr.x + (last ? lr.w - 18 : 0), y: lr.y, w: srcR.w, h: srcR.h };
+  const ghost = from === 'deck' ? backEl() : (v.discard[0] ? cardEl(v.discard[0]) : backEl());
+  const anim = from === 'all' ? Promise.resolve() : fly(ghost, srcR, dest, { dur: 380, rot: -10 });
   const r = await call({ action: 'draw', from }); if (!r) return;
-  const fresh = $$('#hand .card').filter((e) => !before.has(e.dataset.id));
-  fresh.forEach((e, i) => { e.style.visibility = 'hidden'; fly(from === 'deck' ? backEl() : e, srcR, rectOf(e), { delay: i * 70, rot: -10 }).then(() => { e.style.visibility = ''; }); }); }
-async function doLay() { const cs = selCards(); if (!validate(cs)) return toast('Izbor ni veljavna kombinacija', 'bad');
+  await anim;
+  $$('#hand .card').forEach((e) => { if (!before.has(e.dataset.id)) e.animate([{ transform: 'translateY(-10px)', opacity: .6 }, { transform: 'none', opacity: 1 }], { duration: 220 }); }); }
+async function doLay() { const cs = selCards(); const vl = validate(cs); if (!vl) return toast('Izbor ni veljavna kombinacija', 'bad'); if (S.busy) return;
+  const v = S.view; const ids = cs.map((c) => c.id);
   const froms = {}; cs.forEach((c) => { const el = $(`#hand .card[data-id="${CSS.escape(c.id)}"]`); if (el) froms[c.id] = rectOf(el); });
-  const n = S.view.melds.length; const r = await call({ action: 'lay', ids: cs.map((c) => c.id) }); if (!r || S.view.melds.length === n) return;
-  const meld = $(`.meld[data-mi="${S.view.melds.length - 1}"]`); if (!meld) return;
-  $$('.card', meld).forEach((e, i) => { const f = froms[e.dataset.id]; if (!f) return; e.style.visibility = 'hidden'; fly(e, f, rectOf(e), { delay: i * 60, dur: 480, rot: -6 }).then(() => { e.style.visibility = ''; e.animate([{ transform: 'scale(1.12)' }, { transform: 'none' }], { duration: 240 }); }); });
-  toast('Položeno', 'ok'); }
-async function doAdd(mi, side) { const cs = selCards(); if (cs.length !== 1) return toast('Izberi eno karto za dodajanje'); if (!S.view.me.opened) return toast('Najprej moraš odpreti (položiti svojo kombinacijo)', 'bad');
-  const el = $(`#hand .card[data-id="${CSS.escape(cs[0].id)}"]`); const f = el ? rectOf(el) : null; const handBefore = [...S.view.me.hand];
-  const r = await call({ action: 'add', meld: mi, id: cs[0].id, side }); if (!r || !f) return;
-  const t = $(`.meld[data-mi="${mi}"] .card[data-id="${CSS.escape(cs[0].id)}"]`); if (t) { t.style.visibility = 'hidden'; fly(t, f, rectOf(t), { dur: 480, rot: -6 }).then(() => { t.style.visibility = ''; t.closest('.meld').animate([{ boxShadow: '0 0 0 0 rgba(70,190,197,.6)' }, { boxShadow: '0 0 0 14px rgba(70,190,197,0)' }], { duration: 600 }); }); }
-  const joker = S.view.me.hand.find((c) => !handBefore.includes(c)); if (joker && t) { const jn = $(`#hand .card[data-id="${CSS.escape(joker)}"]`); if (jn) { jn.style.visibility = 'hidden'; fly(jn, rectOf(t), rectOf(jn), { dur: 520, delay: 200, rot: 8 }).then(() => (jn.style.visibility = '')); toast('Zamenjal si jokerja, dvojka je v tvoji roki', 'ok'); } } }
-async function doDiscard() { const cs = selCards(); if (cs.length !== 1) return toast('Izberi točno eno karto za zavreči');
-  const el = $(`#hand .card[data-id="${CSS.escape(cs[0].id)}"]`); const from = el ? rectOf(el) : null; const to = rectOf($('#disStack'));
-  if (el) el.style.visibility = 'hidden';
-  const p = from ? fly(cardEl(cs[0]), from, { x: to.x + 6, y: to.y - 6, w: from.w, h: from.h }, { rot: 12, dur: 420 }) : Promise.resolve();
-  const r = await call({ action: 'discard', id: cs[0].id }); await p; if (!r && el) el.style.visibility = ''; }
+  // lokalno takoj (enako kot strežnik), animacija steče brez čakanja
+  v.melds.push({ owner: v.me.seat, cards: arrange(cs, vl).map((x) => ({ c: x.c.id, by: v.me.seat, as: x.as })) }); v.me.hand = v.me.hand.filter((id) => !ids.includes(id)); v.me.opened = true; S.sel.clear(); S.order = []; render();
+  const meld = $(`.meld[data-mi="${v.melds.length - 1}"]`);
+  if (meld) $$('.card', meld).forEach((e, i) => { const f = froms[e.dataset.id]; if (!f) return; e.style.visibility = 'hidden'; fly(e, f, rectOf(e), { delay: i * 50, dur: 380, rot: -6 }).then(() => { e.style.visibility = ''; e.animate([{ transform: 'scale(1.1)' }, { transform: 'none' }], { duration: 200 }); }); });
+  const r = await call({ action: 'lay', ids }); if (!r) await call({ action: 'view' }, { quiet: true }); }
+async function doAdd(mi, side) { const cs = selCards(); if (cs.length !== 1) return toast('Izberi eno karto za dodajanje'); if (!S.view.me.opened) return toast('Najprej moraš odpreti (položiti svojo kombinacijo)', 'bad'); if (S.busy) return;
+  const v = S.view; const card = cs[0]; const m = v.melds[mi]; if (!m) return;
+  const el = $(`#hand .card[data-id="${CSS.escape(card.id)}"]`); const f = el ? rectOf(el) : null;
+  const opt = addOptions(meldObj(m), card); if (!opt) return toast('Ta karta ne paše v to kombinacijo', 'bad');
+  let joker = null;
+  if (opt.swap !== undefined) { const old = m.cards[opt.swap]; joker = old.c; m.cards[opt.swap] = { c: card.id, by: old.by, as: null }; v.me.hand = v.me.hand.filter((x) => x !== card.id); v.me.hand.push(joker); }
+  else { const arr = side === 'lo' && opt.lo ? opt.lo.arr : side === 'hi' && opt.hi ? opt.hi.arr : opt.auto; m.cards = arr.map((x) => { const o = m.cards.find((y) => y.c === x.c.id); return { c: x.c.id, by: o ? o.by : v.me.seat, as: x.as }; }); v.me.hand = v.me.hand.filter((x) => x !== card.id); }
+  S.sel.clear(); S.order = []; render();
+  const t = $(`.meld[data-mi="${mi}"] .card[data-id="${CSS.escape(card.id)}"]`);
+  if (t && f) { t.style.visibility = 'hidden'; fly(t, f, rectOf(t), { dur: 380, rot: -6 }).then(() => { t.style.visibility = ''; t.closest('.meld').animate([{ boxShadow: '0 0 0 0 rgba(70,190,197,.6)' }, { boxShadow: '0 0 0 14px rgba(70,190,197,0)' }], { duration: 500 }); }); }
+  if (joker && t) { const jn = $(`#hand .card[data-id="${CSS.escape(joker)}"]`); if (jn) { jn.style.visibility = 'hidden'; fly(jn, rectOf(t), rectOf(jn), { dur: 420, delay: 150, rot: 8 }).then(() => (jn.style.visibility = '')); toast('Zamenjal si jokerja, dvojka je v tvoji roki', 'ok'); } }
+  const r = await call({ action: 'add', meld: mi, id: card.id, side }); if (!r) await call({ action: 'view' }, { quiet: true }); }
+async function doDiscard() { const cs = selCards(); if (cs.length !== 1) return toast('Izberi točno eno karto za zavreči'); if (S.busy) return;
+  const v = S.view; const card = cs[0];
+  const el = $(`#hand .card[data-id="${CSS.escape(card.id)}"]`); const from = el ? rectOf(el) : null; const to = rectOf($('#disStack'));
+  v.me.hand = v.me.hand.filter((x) => x !== card.id); v.discard = [card.id]; v.discardCount++; v.phase = 'done'; S.sel.clear(); S.order = []; render();
+  if (from) fly(cardEl(card), from, { x: to.x + 6, y: to.y - 6, w: from.w, h: from.h }, { rot: 12, dur: 360 });
+  const r = await call({ action: 'discard', id: card.id }); if (!r) await call({ action: 'view' }, { quiet: true }); }
 $('#pDeck').onclick = () => doDraw('deck'); $('#disStack').onclick = () => doDraw('top'); $('#bAll').onclick = () => doDraw('all');
 $$('#pDis .split button').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); doDraw(b.dataset.from); }));
 $('#bLay').onclick = doLay; $('#bDis').onclick = doDiscard;
@@ -333,10 +346,12 @@ $$('#log [data-t]').forEach((b) => (b.onclick = () => { $$('#log [data-t]').forE
 /* ================= animacije ================= */
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
 function rectOf(el) { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+S.flying = new Set();
 function fly(node, from, to, { dur = 520, delay = 0, rot = 0 } = {}) {
+  const fid = node && node.dataset ? node.dataset.id : null; if (fid) S.flying.add(fid);
   return new Promise((res) => { const g = node.cloneNode(true); g.classList.add('ghost'); g.style.cssText += `;position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;--cw:${from.w}px;--ch:${from.h}px;margin:0;z-index:80;pointer-events:none;transform:none;visibility:visible`; document.body.appendChild(g);
     const dx = to.x - from.x, dy = to.y - from.y, sx = to.w / from.w, sy = to.h / from.h;
-    g.animate([{ transform: 'translate(0,0) rotate(0deg)' }, { transform: `translate(${dx * .5}px,${dy * .5 - 40}px) rotate(${rot}deg) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: .5 }, { transform: `translate(${dx}px,${dy}px) rotate(0deg) scale(${sx},${sy})` }], { duration: dur, delay, easing: EASE, fill: 'forwards' }).onfinish = () => { g.remove(); res(); }; });
+    g.animate([{ transform: 'translate(0,0) rotate(0deg)' }, { transform: `translate(${dx * .5}px,${dy * .5 - 40}px) rotate(${rot}deg) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: .5 }, { transform: `translate(${dx}px,${dy}px) rotate(0deg) scale(${sx},${sy})` }], { duration: dur, delay, easing: EASE, fill: 'forwards' }).onfinish = () => { g.remove(); if (fid) { S.flying.delete(fid); $$(`.meld .card[data-id="${CSS.escape(fid)}"], #hand .card[data-id="${CSS.escape(fid)}"]`).forEach((e) => (e.style.visibility = '')); } res(); }; });
 }
 function flipHand(before) { $$('#hand .card').forEach((e) => { const o = before.get(e.dataset.id); if (!o) return; const n = e.getBoundingClientRect(); const dx = o.left - n.left, dy = o.top - n.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; e.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'translate(0,0)' }], { duration: 380, easing: EASE }); }); }
 function dealAnim() {
@@ -382,4 +397,4 @@ async function loadLeaderboard() {
   el.innerHTML = '<table class="lbt"><thead><tr><th>#</th><th>Igralec</th><th class="num">Točke</th><th class="num">Igre</th><th class="num">Zmage</th></tr></thead><tbody>' + rows.map((r, i) => `<tr class="${r.user_id === S.user?.id ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.points}</td><td class="num">${r.games}</td><td class="num">${r.wins}</td></tr>`).join('') + '</tbody></table><p class="small-note" style="margin-top:10px">Štejejo samo igre, odigrane do konca (500 točk).</p>';
 }
 
-window.__call = call;
+window.__call = call; window.__doLay = doLay; window.__doDiscard = doDiscard; window.__render = render;
