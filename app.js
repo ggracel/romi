@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=6';
+import * as E from './engine.js?v=7';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -394,7 +394,7 @@ async function loadLeaderboard() {
   if (MOCK) rows = [{ name: 'Gašper', points: 1240, games: 6, wins: 3 }, { name: 'Jaka', points: 980, games: 6, wins: 2 }, { name: 'Nejc', points: 410, games: 3, wins: 1 }];
   else { const { data } = await sb.from('romi_stats').select('*').order('points', { ascending: false }).limit(20); rows = data || []; }
   if (!rows.length) { el.innerHTML = '<span class="small-note">Še ni zaključenih iger. Štejejo samo igre, odigrane do 500 točk.</span>'; return; }
-  el.innerHTML = '<table class="lbt"><thead><tr><th>#</th><th>Igralec</th><th class="num">Točke</th><th class="num">Igre</th><th class="num">Zmage</th></tr></thead><tbody>' + rows.map((r, i) => `<tr class="${r.user_id === S.user?.id ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.points}</td><td class="num">${r.games}</td><td class="num">${r.wins}</td></tr>`).join('') + '</tbody></table><p class="small-note" style="margin-top:10px">Štejejo samo igre, odigrane do konca (500 točk).</p>';
+  el.innerHTML = '<ol class="lbl">' + rows.map((r, i) => `<li class="${r.user_id === S.user?.id ? 'you' : ''} ${i < 3 ? 'top' + (i + 1) : ''}"><span class="lb-rank">${i + 1}</span><span class="lb-name">${esc(r.name)}<small>${r.games} ${r.games === 1 ? 'igra' : r.games === 2 ? 'igri' : r.games < 5 ? 'igre' : 'iger'} · ${r.wins} ${r.wins === 1 ? 'zmaga' : r.wins === 2 ? 'zmagi' : r.wins > 2 && r.wins < 5 ? 'zmage' : 'zmag'}</small></span><span class="lb-pts">${r.points}<small>točk</small></span></li>`).join('') + '</ol><p class="lb-note">Štejejo samo igre, odigrane do 500 točk.</p>';
 }
 
 window.__call = call; window.__doLay = doLay; window.__doDiscard = doDiscard; window.__render = render;

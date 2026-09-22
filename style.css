@@ -422,3 +422,22 @@ body.wait .btn{opacity:.7}
 .mini-log{position:static;width:auto;grid-column:1/-1;display:flex;flex-direction:row;gap:18px;padding:0 20px 8px;font-size:12px}
 .mini-log div{opacity:.6}
 .mini-log div:last-child{opacity:1}
+
+/* ---- lestvica v2 ---- */
+.lb{padding:18px 18px 14px}
+.lb-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.lb-h .mono:first-child{color:var(--teal)}
+.lbl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lbl li{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;border:1px solid transparent;background:rgba(20,17,18,.6)}
+.lbl li.you{border-color:rgba(70,190,197,.45);background:rgba(70,190,197,.07)}
+.lb-rank{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--mono);color:var(--dim);background:var(--ink4)}
+.lbl li.top1 .lb-rank{background:var(--teal);color:#0d2c2e}
+.lbl li.top2 .lb-rank{background:rgba(70,190,197,.35);color:var(--fg)}
+.lbl li.top3 .lb-rank{background:rgba(70,190,197,.18);color:var(--fg)}
+.lb-name{font-weight:600;font-size:14px;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-name small{display:block;font:500 10.5px var(--mono);color:var(--mute);letter-spacing:.04em;margin-top:3px}
+.lb-pts{text-align:right;font:700 17px var(--poppins);letter-spacing:-.02em;line-height:1}
+.lb-pts small{display:block;font:500 9.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-top:3px}
+.lb-note{font-size:11.5px;color:var(--mute);margin-top:12px}
+.lobby-top{align-items:center}
+a.btn{text-decoration:none}
