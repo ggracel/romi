@@ -79,7 +79,7 @@ export function tableVal(x) {
 export function newGame(players, turnTime, goal) {
   return {
     round: 0, deck: [], discard: [], melds: [], rounds: [],
-    players: players.map((p, i) => ({ id: p.user_id, name: p.name, seat: i, hand: [], opened: false, score: 0, ready: false })),
+    players: players.map((p, i) => ({ id: p.user_id, name: p.name, seat: i, hand: [], opened: false, score: 0, ready: false, bot: !!p.is_bot })),
     turn: 0, phase: 'lobby', turnStarted: 0, paused: false, pausedAt: 0, turnTime, goal,
     turnsInRound: 0, starter: 0, drawnTop: null, log: [], status: 'playing', winner: null, roundEnd: null, roundStartedAt: 0,
   };
@@ -189,7 +189,7 @@ function endRound(g, winnerSeat, now) {
   rows.forEach((r) => { g.players[r.seat].score += r.sum; });
   g.rounds.push(rows.map((r) => r.sum));
   g.roundEnd = { round: g.round, winner: winnerSeat, rows, at: now };
-  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = false));
+  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = !!p.bot));
   g.log.push({ t: now, m: g.players[winnerSeat].name + ' je šel ven. Konec runde ' + g.round + '.' });
   const over = g.players.filter((p) => p.score >= g.goal);
   if (over.length) { const w = over.sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.log.push({ t: now, m: w.name + ' je zmagal igro s ' + w.score + ' točkami!' }); }
@@ -208,7 +208,30 @@ export function view(g, seat, now) {
     paused: g.paused, now, deckCount: g.deck.length, discard: g.discard.slice(-3), discardCount: g.discard.length, drawnTop: g.drawnTop,
     melds: g.melds, rounds: g.rounds, roundEnd: g.roundEnd, roundStartedAt: g.roundStartedAt, log: g.log.slice(-12),
     turnsInRound: g.turnsInRound, playersCount: g.players.length,
-    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready })),
+    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot })),
     me: me ? { seat: me.seat, hand: me.hand, opened: me.opened } : null,
   };
+}
+
+/* ===== testni bot: odigra eno potezo, če je na vrsti in je minilo vsaj 1,2 s ===== */
+export function botStep(g, now) {
+  if (g.status !== 'playing' || g.phase === 'roundEnd' || g.paused) return false;
+  const p = cur(g); if (!p.bot || now - g.turnStarted < 1200) return false;
+  try {
+    if (g.phase === 'draw') act(g, g.turn, { type: 'draw', from: 'deck' }, now);
+    // položi vse veljavne trojke, dokler ostane vsaj 1 karta za zavreči
+    let laid = true;
+    while (laid) { laid = false; const h = p.hand.map(parse);
+      for (let a = 0; a < h.length && !laid; a++) for (let b = a + 1; b < h.length && !laid; b++) for (let c = b + 1; c < h.length && !laid; c++) {
+        const cs = [h[a], h[b], h[c]]; if (validate(cs) && p.hand.length - 3 >= 1) { act(g, g.turn, { type: 'lay', ids: cs.map((x) => x.id) }, now); laid = true; } } }
+    // dodaj karte v kombinacije, če je odprt
+    if (p.opened) { let added = true; while (added) { added = false;
+      for (const id of [...p.hand]) { if (p.hand.length <= 1) break; for (let mi = 0; mi < g.melds.length && !added; mi++) {
+        const mm = { cards: g.melds[mi].cards.map((x) => ({ c: parse(x.c), by: x.by, as: x.as })) }; if (addOptions(mm, parse(id))) { try { act(g, g.turn, { type: 'add', meld: mi, id }, now); added = true; } catch (_e) { /* ni šlo */ } } } if (added) break; } } }
+    const nonJ = p.hand.filter((c) => !isJ(c)); const pool = nonJ.length ? nonJ : p.hand;
+    const cantFinish = p.hand.length === 1 && g.turnsInRound < g.players.length;
+    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; return true; }
+    act(g, g.turn, { type: 'discard', id: pool[Math.floor(Math.random() * pool.length)] }, now);
+  } catch (e) { g.log.push({ t: now, m: 'Bot ' + p.name + ' napaka: ' + e.message }); autoMove(g, now); }
+  return true;
 }

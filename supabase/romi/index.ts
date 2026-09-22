@@ -86,6 +86,15 @@ Deno.serve(async (req) => {
       await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", body.user_id);
       await bump(roomId); return ok({});
     }
+    if (action === "add_bot") {
+      if (r.admin !== uid) throw ue("Samo admin.");
+      if (r.status !== "waiting") throw ue("Med igro ne gre.");
+      const ps = await players(roomId); if (ps.length >= 4) throw ue("Soba je polna.");
+      const names = ["Bot Ana", "Bot Bor", "Bot Cene", "Bot Dana"]; const name = names.find((n) => !ps.some((p) => p.name === n)) || "Bot";
+      const seat = [0, 1, 2, 3].find((s) => !ps.some((p) => p.seat === s));
+      await admin.from("romi_players").insert({ room_id: roomId, user_id: crypto.randomUUID(), name, seat, is_bot: true });
+      await bump(roomId); return ok({});
+    }
     if (action === "start") {
       if (r.admin !== uid) throw ue("Samo admin lahko začne igro.");
       if (r.status !== "waiting") throw ue("Igra že teče.");
@@ -114,7 +123,7 @@ Deno.serve(async (req) => {
       if (action === "pause" && !g.paused) { g.paused = true; g.pausedAt = now; g.log.push({ t: now, m: "Admin je ustavil igro (pavza)." }); changed = true; }
       if (action === "resume" && g.paused) { g.turnStarted += now - g.pausedAt; g.paused = false; g.log.push({ t: now, m: "Igra se nadaljuje." }); changed = true; }
     } else if (action === "view" || action === "tick") {
-      changed = E.checkTimeout(g, now);
+      changed = E.checkTimeout(g, now) || E.botStep(g, now);
     } else {
       changed = E.checkTimeout(g, now);
       if (!changed) { E.act(g, seat, { type: action, ...body }, now); changed = true; }
