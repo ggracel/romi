@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=3';
+import * as E from './engine.js?v=4';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -73,10 +73,10 @@ function show(name) { document.body.dataset.screen = name; $$('.view').forEach((
 function ini(n) { return (n || '?').trim()[0].toUpperCase(); }
 function myName() { const m = S.user?.user_metadata || {}; return m.name || m.full_name || (S.user?.email || '').split('@')[0]; }
 async function call(body, { quiet } = {}) {
-  if (S.busy && !quiet) return null; S.busy = !quiet;
-  try { const r = await api({ room_id: S.room?.id, ...body }); if (r.view) applyView(r.view); return r; }
+  if (S.busy && !quiet) return null; S.busy = !quiet; document.body.classList.add('wait');
+  try { const r = await api({ room_id: S.room?.id, ...body }); if (r.view) applyView(r.view); if (r.players && !r.view) { S.room = r.room || S.room; S.players = r.players; if (document.body.dataset.screen === 'create') renderRoom(); } return r; }
   catch (e) { if (!quiet) toast(e.message, 'bad'); else console.warn(e.message); return null; }
-  finally { if (!quiet) S.busy = false; }
+  finally { if (!quiet) S.busy = false; document.body.classList.remove('wait'); }
 }
 
 /* ================= karte ================= */
@@ -135,7 +135,7 @@ function renderRooms() {
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 $('#crTime').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $$('#crTime button').forEach((x) => x.setAttribute('aria-pressed', x === b)); };
-$('#btnCreate').onclick = async () => { const name = $('#crName').value.trim() || 'Nova soba'; const t = +$('#crTime [aria-pressed="true"]').dataset.t; const r = await call({ action: 'create', name, turn_time: t }); if (r?.room) { await loadRooms(); enterRoom(r.room); } };
+$('#btnCreate').onclick = async () => { const name = $('#crName').value.trim() || 'Nova soba'; const t = +$('#crTime [aria-pressed="true"]').dataset.t; const r = await call({ action: 'create', name, turn_time: t }); if (r?.room) { S.room = r.room; S.players = r.players || []; $('#crForm').hidden = true; $('#crInfo').hidden = false; renderRoom(); subscribeRoom(r.room.id, () => refreshRoom()); } };
 $('#btnBack').onclick = () => { unsubscribeRoom(); S.room = null; enterLobby(); };
 $('#btnLeave').onclick = async () => { await call({ action: 'leave' }); unsubscribeRoom(); S.room = null; enterLobby(); };
 $('#bStart').onclick = async () => { const r = await call({ action: 'start' }); if (r?.view) startGame(); };
@@ -156,7 +156,11 @@ async function refreshRoom() {
     S.room = r; S.players = ps || [];
     if (!S.players.some((p) => p.user_id === S.user.id)) { toast('Admin te je odstranil iz sobe'); unsubscribeRoom(); S.room = null; return enterLobby(); }
   }
-  if (S.room.status === 'playing') { if (document.body.dataset.screen !== 'game') startGame(); else await call({ action: 'view' }, { quiet: true }); return; }
+  renderRoom();
+}
+function renderRoom() {
+  if (!S.room) return;
+  if (S.room.status === 'playing') { if (document.body.dataset.screen !== 'game') startGame(); else call({ action: 'view' }, { quiet: true }); return; }
   if (S.room.status === 'finished') { return; }
   const isAdmin = S.room.admin === S.user.id;
   $('#wiName').textContent = S.room.name; $('#wiSet').textContent = S.room.turn_time + ' s na potezo · do 500 točk';

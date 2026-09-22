@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body data-screen="boot">
 <div id="bg"><canvas></canvas></div>
@@ -35,7 +35,7 @@
 <section class="view lobby" data-view="lobby" hidden>
   <div class="lobby-in">
     <div class="lobby-top">
-      <h1><span class="brand"><img src="foqs-logo.png" alt="foqs."><b>romi</b></span><small>Ustvari sobo ali se pridruži prijateljem. 2 do 4 igralci, do 500 točk.</small></h1>
+      <h1><span class="brand-t">foqs.<b>romi</b><i>.</i></span><small>Ustvari sobo ali se pridruži prijateljem. 2 do 4 igralci, do 500 točk.</small></h1>
       <div class="topbtns"><span class="chip"><i style="background:var(--teal)" id="meIni">G</i><span id="meName">…</span></span><a class="btn" href="https://foqs.si/">Hub</a><button class="btn" id="btnLogout">Odjava</button></div>
     </div>
     <div class="rooms" id="rooms"></div>
@@ -45,7 +45,7 @@
 <!-- ============ NOVA SOBA / ČAKALNICA ============ -->
 <section class="view lobby" data-view="create" hidden>
   <div class="lobby-in" style="width:min(880px,94vw)">
-    <div class="lobby-top"><h1><span class="brand"><img src="foqs-logo.png" alt="foqs."><b>romi</b></span><small id="crSub"></small></h1><div class="topbtns"><button class="btn" id="btnBack">← Sobe</button></div></div>
+    <div class="lobby-top"><h1><span class="brand-t">foqs.<b>romi</b><i>.</i></span><small id="crSub"></small></h1><div class="topbtns"><button class="btn" id="btnBack">← Sobe</button></div></div>
     <div class="create">
       <div class="cset" id="crForm">
         <label class="mono">Ime sobe</label><input class="inp" id="crName" value="" placeholder="Ime sobe" maxlength="40">
@@ -73,7 +73,7 @@
 <!-- ============ IGRA ============ -->
 <section class="view" data-view="game" hidden>
 <header class="top">
-  <div class="brand"><img src="foqs-logo.png" alt="foqs."><b>romi</b></div>
+  <div class="brand-t sm">foqs.<b>romi</b><i>.</i></div>
   <div class="room-tag"><span>Soba <b id="gRoom"></b></span><span>Runda <b id="gRound"></b></span><span>Cilj <b id="gGoal">500</b></span></div>
   <div class="scores"><span id="scores" style="display:flex;gap:6px"></span><button class="btn" id="bLog" style="padding:5px 12px;font-size:12.5px;border-radius:99px;margin-left:6px">Dnevnik</button><button class="btn" id="bPause" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Pavza</button><button class="btn" id="bEnd" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Končaj igro</button></div>
 </header>
@@ -121,6 +121,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>

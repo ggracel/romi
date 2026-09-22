@@ -11,8 +11,7 @@ function cors(origin) {
 const admin = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
 
 async function bump(roomId, patch = {}) {
-  const { data } = await admin.from("romi_rooms").select("version").eq("id", roomId).single();
-  await admin.from("romi_rooms").update({ ...patch, version: (data?.version ?? 0) + 1, updated_at: new Date().toISOString() }).eq("id", roomId);
+  await admin.rpc("romi_bump", { p_room: roomId, p_status: patch.status ?? null });
 }
 async function loadGame(roomId) {
   const { data } = await admin.from("romi_games").select("state").eq("room_id", roomId).single();
@@ -56,8 +55,9 @@ Deno.serve(async (req) => {
       await admin.from("romi_players").delete().eq("user_id", uid);
       const { data: r, error } = await admin.from("romi_rooms").insert({ name, admin: uid, turn_time }).select().single();
       if (error) throw error;
-      await admin.from("romi_players").insert({ room_id: r.id, user_id: uid, name: displayName(user), seat: 0 });
-      return ok({ room: r });
+      const me = { room_id: r.id, user_id: uid, name: displayName(user), seat: 0, is_bot: false };
+      await admin.from("romi_players").insert(me);
+      return ok({ room: r, players: [me] });
     }
     const roomId = body.room_id; if (!roomId) throw ue("Manjka soba.");
     const r = await room(roomId);
@@ -69,8 +69,9 @@ Deno.serve(async (req) => {
       if (ps.length >= 4) throw ue("Soba je polna.");
       await admin.from("romi_players").delete().eq("user_id", uid);
       const seat = [0, 1, 2, 3].find((s) => !ps.some((p) => p.seat === s));
-      await admin.from("romi_players").insert({ room_id: roomId, user_id: uid, name: displayName(user), seat });
-      await bump(roomId); return ok({ room: r });
+      const me = { room_id: roomId, user_id: uid, name: displayName(user), seat, is_bot: false };
+      await Promise.all([admin.from("romi_players").insert(me), bump(roomId)]);
+      return ok({ room: r, players: [...ps, me] });
     }
     if (action === "leave") {
       if (r.status === "waiting") {
@@ -83,8 +84,8 @@ Deno.serve(async (req) => {
     if (action === "kick") {
       if (r.admin !== uid) throw ue("Samo admin.");
       if (r.status !== "waiting") throw ue("Med igro ne gre.");
-      await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", body.user_id);
-      await bump(roomId); return ok({});
+      await Promise.all([admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", body.user_id), bump(roomId)]);
+      return ok({ room: r, players: await players(roomId) });
     }
     if (action === "add_bot") {
       if (r.admin !== uid) throw ue("Samo admin.");
@@ -92,8 +93,9 @@ Deno.serve(async (req) => {
       const ps = await players(roomId); if (ps.length >= 4) throw ue("Soba je polna.");
       const names = ["Bot Ana", "Bot Bor", "Bot Cene", "Bot Dana"]; const name = names.find((n) => !ps.some((p) => p.name === n)) || "Bot";
       const seat = [0, 1, 2, 3].find((s) => !ps.some((p) => p.seat === s));
-      await admin.from("romi_players").insert({ room_id: roomId, user_id: crypto.randomUUID(), name, seat, is_bot: true });
-      await bump(roomId); return ok({});
+      const bot = { room_id: roomId, user_id: crypto.randomUUID(), name, seat, is_bot: true };
+      await Promise.all([admin.from("romi_players").insert(bot), bump(roomId)]);
+      return ok({ room: r, players: [...ps, bot] });
     }
     if (action === "start") {
       if (r.admin !== uid) throw ue("Samo admin lahko začne igro.");
@@ -103,8 +105,8 @@ Deno.serve(async (req) => {
       const g = E.newGame(ps.map((p, i) => ({ ...p, seat: i })), r.turn_time, r.goal);
       g.starter = Math.floor(Math.random() * ps.length);
       E.startRound(g, now);
-      await Promise.all(ps.map((p, i) => admin.from("romi_players").update({ seat: i }).eq("room_id", roomId).eq("user_id", p.user_id)));
-      await saveGame(roomId, g); await bump(roomId, { status: "playing" });
+      await Promise.all([...ps.map((p, i) => admin.from("romi_players").update({ seat: i }).eq("room_id", roomId).eq("user_id", p.user_id)), saveGame(roomId, g)]);
+      await bump(roomId, { status: "playing" });
       return ok({ view: E.view(g, ps.findIndex((p) => p.user_id === uid), now) });
     }
     if (action === "end") {
@@ -129,10 +131,7 @@ Deno.serve(async (req) => {
       if (!changed) { E.act(g, seat, { type: action, ...body }, now); changed = true; }
       else if (action !== "ready") throw ue("Čas je potekel, poteza je bila odigrana samodejno.");
     }
-    if (changed) {
-      await saveGame(roomId, g);
-      await bump(roomId, g.status === "finished" ? { status: "finished" } : {});
-    }
+    if (changed) await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
     return ok({ view: E.view(g, seat, now) });
   } catch (e) {
     const msg = e?.user ? e.message : "Napaka na strežniku: " + (e?.message || e);
