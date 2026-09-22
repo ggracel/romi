@@ -307,17 +307,6 @@ body.dragging .hand .card:hover{transform:none}
 .card.xs .pips span{font-size:calc(var(--cw) * .17)}.card.xs .face small,.card.xs .jl{display:none}
 .card.xs::before{display:none}
 
-/* ---- prijava ---- */
-.login{position:relative;z-index:1;min-height:100vh;display:grid;place-items:center;padding:24px}
-.lg-card{width:min(400px,92vw);padding:34px 32px 28px;border-radius:22px;border:1px solid var(--line2);background:rgba(26,22,23,.9);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:pop .45s cubic-bezier(.2,.8,.2,1)}
-.lg-card .brand{justify-content:center;margin-bottom:8px}.lg-card .brand img{height:26px}.lg-card .brand b{font-size:22px}
-.lg-card h2{font-size:20px;text-align:center;margin:10px 0 4px}
-.lg-card p{color:var(--dim);font-size:13px;text-align:center;margin-bottom:22px}
-.lg-card .inp{margin-bottom:10px}
-.lg-card .btn{width:100%;justify-content:center;margin-top:6px}
-.lg-card .err{color:var(--bad);font-size:12.5px;min-height:18px;margin:6px 0 2px;text-align:center}
-.lg-card .foot{text-align:center;font-size:12px;color:var(--mute);margin-top:18px}
-.lg-card .foot a{color:var(--teal)}
 /* ---- čakalnica ---- */
 .wait-note{font-size:12.5px;color:var(--mute);margin-top:12px;line-height:1.5}
 .topbtns{display:flex;gap:8px;align-items:center}
@@ -339,3 +328,26 @@ body.dragging .hand .card:hover{transform:none}
 .zh .fan .card{background:linear-gradient(160deg,#2c2728,#1a1617);box-shadow:0 0 0 1px rgba(70,190,197,.35)}
 [hidden]{display:none!important}
 .fin{z-index:70}
+
+/* ---- prijava: 1:1 iz huba foqs.si ---- */
+.lg{position:relative;z-index:1;min-height:100vh}
+.lg-inner{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:calc(46px + env(safe-area-inset-top,0px)) 20px calc(46px + env(safe-area-inset-bottom,0px))}
+.lg-wrap{width:100%;max-width:410px;display:flex;flex-direction:column}
+.lg-card{position:relative;width:100%;max-width:410px;background:rgba(26,22,23,.9);border:1px solid var(--line);border-radius:20px;padding:30px 28px 26px;box-shadow:0 30px 80px rgba(0,0,0,.6);backdrop-filter:blur(8px);margin:0}
+.lg-card .wm{width:150px;height:auto;display:block}
+.lg-card > small{display:block;margin:10px 0 16px;letter-spacing:.3em;font-size:10.5px;font-weight:600;color:var(--dim);font-family:var(--mono)}
+.lg-card p.note{color:var(--mute);font-size:14px;margin-bottom:18px}
+.lg-f{display:grid;gap:5px;margin-bottom:14px}
+.lgd .lg-f label{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.lg-f input{background:var(--ink);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:12px 13px;font-family:var(--inter);font-size:14.5px;width:100%}
+.lg-f input::placeholder{color:#6a6465}
+.lg-f input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(70,190,197,.2)}
+.lg-btn{width:100%;background:var(--teal);color:#0d2c2e;border:0;border-radius:10px;padding:13px;font-family:var(--mono);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:12.5px;transition:background .2s,transform .15s}
+.lg-btn:hover{background:#5fcdd3;transform:translateY(-1px)}
+.lg-btn[disabled]{opacity:.65;pointer-events:none}
+.authmsg{min-height:20px;margin-top:12px;text-align:center;font-size:13px;line-height:1.5;color:var(--mute);font-family:var(--inter)}
+.authmsg.err{color:#ffb2b7}
+.lg-alt{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);text-align:center;color:var(--mute);font-family:var(--mono);font-size:11.5px}
+.linkish{background:none;border:0;padding:0;color:var(--teal);font-weight:600;font-family:var(--mono);font-size:11.5px;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.linkish:hover{color:#6fd4da}
+.lg-hint{text-align:center;margin-top:16px;font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal);opacity:.75}

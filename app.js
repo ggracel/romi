@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=1';
+import * as E from './engine.js?v=3';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -16,6 +16,7 @@ const S = { user: null, rooms: [], room: null, players: [], view: null, sel: new
 /* ================= transport ================= */
 let sb = null, api, subscribeRooms, subscribeRoom, unsubscribeRoom, auth;
 if (!MOCK) {
+  if (!window.supabase) { document.body.dataset.screen = 'login'; document.querySelector('[data-view="login"]').hidden = false; document.getElementById('lgErr').textContent = 'Knjižnica za prijavo se ni naložila. Osveži stran.'; throw new Error('supabase-js manjka'); }
   sb = window.supabase.createClient(SB_URL, SB_KEY);
   api = async (body) => {
     const { data: { session } } = await sb.auth.getSession();
@@ -102,8 +103,8 @@ async function boot() {
   S.user = u; $('#meName').textContent = myName(); $('#meIni').textContent = ini(myName());
   await enterLobby();
 }
-$('#loginForm').addEventListener('submit', async (e) => { e.preventDefault(); const b = $('#lgBtn'); b.disabled = true; $('#lgErr').textContent = '';
-  try { S.user = await auth.login($('#lgEmail').value.trim(), $('#lgPass').value); $('#meName').textContent = myName(); $('#meIni').textContent = ini(myName()); await enterLobby(); } catch (err) { $('#lgErr').textContent = err.message; } finally { b.disabled = false; } });
+$('#loginForm').addEventListener('submit', async (e) => { e.preventDefault(); const b = $('#lgBtn'); b.disabled = true; $('#lgErr').textContent = ''; $('#lgErr').className = 'authmsg';
+  try { S.user = await auth.login($('#lgEmail').value.trim(), $('#lgPass').value); $('#meName').textContent = myName(); $('#meIni').textContent = ini(myName()); await enterLobby(); } catch (err) { $('#lgErr').textContent = err.message; $('#lgErr').className = 'authmsg err'; } finally { b.disabled = false; } });
 $('#btnLogout').onclick = async () => { await auth.logout(); location.reload(); };
 
 /* ================= sobe ================= */
@@ -130,7 +131,7 @@ function renderRooms() {
     return `<div class="room ${mine ? 'mine' : ''}" data-id="${r.id}"><div class="st">${st}</div><h3>${esc(r.name)}</h3><div class="avs">${ps.map((p, i) => `<div class="av" style="background:${COLORS[i]};color:#0d2c2e" title="${esc(p.name)}">${ini(p.name)}</div>`).join('')}${Array.from({ length: 4 - ps.length }, () => '<div class="av empty">+</div>').join('')}</div><div class="mono">Admin: ${esc(adminName)} · ${r.turn_time} s na potezo</div>${btn}</div>`; });
   el.innerHTML = cards.join('') + '<div class="room new" id="roomNew"><div><div class="plus">+</div><b>Nova soba</b><span style="font-size:13px">Ti si admin, ti začneš igro.</span></div></div>';
   $$('#rooms .room[data-id]').forEach((c) => (c.onclick = async () => { const r = S.rooms.find((x) => x.id === c.dataset.id); if (!r) return; const mine = S.allPlayers.some((p) => p.room_id === r.id && p.user_id === uid); if (!mine && r.status !== 'waiting') return toast('Igra v tej sobi že teče'); if (!mine) { const res = await call({ action: 'join', room_id: r.id }); if (!res) return; } enterRoom(r); }));
-  $('#roomNew').onclick = () => { S.room = null; $('#crForm').hidden = false; $('#crInfo').hidden = true; $('#crName').value = ''; $('#rp').innerHTML = ''; $('#rpN').textContent = '0/4'; $('#bStart').disabled = true; $('#crSub').textContent = 'Nova soba · ti si admin. Igro zaženeš sam, ko so vsi notri.'; show('create'); };
+  $('#roomNew').onclick = () => { S.room = null; $('#crForm').hidden = false; $('#crInfo').hidden = true; $('#crName').value = ''; $('#rp').innerHTML = ''; $('#rpN').textContent = '0/4'; $('#bStart').disabled = true; $('#crSub').textContent = ''; show('create'); };
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 $('#crTime').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; $$('#crTime button').forEach((x) => x.setAttribute('aria-pressed', x === b)); };
@@ -159,10 +160,11 @@ async function refreshRoom() {
   if (S.room.status === 'finished') { return; }
   const isAdmin = S.room.admin === S.user.id;
   $('#wiName').textContent = S.room.name; $('#wiSet').textContent = S.room.turn_time + ' s na potezo · do 500 točk';
-  $('#crSub').textContent = isAdmin ? 'Tvoja soba · igro zaženeš sam, ko so vsi notri.' : 'Čakalnica · igro zažene admin.';
+  $('#crSub').textContent = isAdmin ? '' : 'Čakalnica · igro zažene admin.';
   $('#wiNote').textContent = isAdmin ? 'Prijatelji te sobo vidijo v seznamu in se pridružijo sami. Ko so vsi notri, klikni Začni igro.' : 'Počakaj, da admin zažene igro. Stran se posodobi sama.';
-  $('#rp').innerHTML = S.players.map((p, i) => `<div class="rpl"><div class="av" style="background:${COLORS[i]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${p.user_id === S.room.admin ? ' <small>admin</small>' : ''}${p.user_id === S.user.id ? ' <span class="small-note">(ti)</span>' : ''}</div>${isAdmin && p.user_id !== S.user.id ? `<button class="x" data-k="${p.user_id}" title="Odstrani">×</button>` : ''}</div>`).join('') + Array.from({ length: 4 - S.players.length }, () => '<div class="rpl empty"><div class="av empty">+</div><div class="nm">Čaka na igralca …</div></div>').join('');
+  $('#rp').innerHTML = S.players.map((p, i) => `<div class="rpl"><div class="av" style="background:${COLORS[i]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${p.user_id === S.room.admin ? ' <small>admin</small>' : ''}${p.is_bot ? ' <span class="small-note">bot</span>' : ''}${p.user_id === S.user.id ? ' <span class="small-note">(ti)</span>' : ''}</div>${isAdmin && p.user_id !== S.user.id ? `<button class="x" data-k="${p.user_id}" title="Odstrani">×</button>` : ''}</div>`).join('') + Array.from({ length: 4 - S.players.length }, () => '<div class="rpl empty"><div class="av empty">+</div><div class="nm">Čaka na igralca …</div></div>').join('');
   $$('#rp .x').forEach((b) => (b.onclick = () => call({ action: 'kick', user_id: b.dataset.k })));
+  if (isAdmin && S.players.length < 4) { const bb = document.createElement('button'); bb.className = 'btn'; bb.style.cssText = 'width:100%;justify-content:center;margin-top:4px;font-size:12.5px'; bb.textContent = '+ Dodaj testnega bota'; bb.onclick = () => call({ action: 'add_bot' }); $('#rp').appendChild(bb); }
   $('#rpN').textContent = S.players.length + '/4'; $('#rpLive').innerHTML = '<span class="spin"></span> v živo';
   const b = $('#bStart'); b.hidden = !isAdmin; b.disabled = S.players.length < 2; b.textContent = S.players.length < 2 ? 'Začni igro (vsaj 2 igralca)' : 'Začni igro (' + S.players.length + ' igralci)';
   $('#btnLeave').textContent = isAdmin ? 'Zapri sobo' : 'Zapusti sobo';
@@ -195,6 +197,7 @@ function tickTimer() {
   const left = v.paused ? Math.ceil((v.turnTime * 1000 - (v.pausedAtLeft || 0)) / 1000) : turnLeft();
   $$('[data-timer]').forEach((e) => { e.textContent = left; e.style.setProperty('--p', left / v.turnTime); });
   $$('.ring').forEach((r) => r.classList.toggle('urgent', left <= 10 && left > 0 && !v.paused));
+  const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 1300) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 1200)); return; }
   if (left <= 0 && !v.paused && !S.busy && !S.ticked) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 2000)); }
 }
 function selCards() { return S.order.map((id) => parse(id)); }
@@ -306,7 +309,7 @@ function showLog(auto) {
   $('#cards').innerHTML = re ? re.rows.map((r) => { const p = v.players[r.seat]; return `<div class="cr"><div class="cr-h"><i class="dot" style="background:${COLORS[r.seat]}"></i><b>${esc(p.name)}</b><span class="mono">${f(r.table)} miza · ${f(-r.hand)} roka</span><b class="cr-sum ${r.sum >= 0 ? 'pos' : 'neg'}">${r.sum > 0 ? '+' : ''}${r.sum}</b></div><div class="cr-l"><span class="mono">Miza</span><div class="cs">${mini(r.tableCards)}</div></div><div class="cr-l"><span class="mono">Roka</span><div class="cs">${mini(r.handCards)}</div></div></div>`; }).join('') : '<p class="small-note">Karte se pokažejo ob koncu runde.</p>';
   const rn = v.players.filter((p) => p.ready).length; $('#readyN').textContent = rn; $('#readyT').textContent = v.players.length;
   const inEnd = v.phase === 'roundEnd' && v.status === 'playing';
-  $('#readys').innerHTML = inEnd ? v.players.map((p) => `<button class="ready ${p.ready ? 'on' : ''}" ${p.seat === v.me.seat && !p.ready ? 'data-me="1"' : 'disabled'}>${p.seat === v.me.seat ? 'Ti · Ready' : esc(p.name)}</button>`).join('') : '';
+  $('#readys').innerHTML = inEnd ? v.players.map((p) => `<button class="ready ${p.ready ? 'on' : ''}" ${p.seat === v.me.seat && !p.ready ? 'data-me="1"' : 'disabled'}>${p.seat === v.me.seat ? 'Ti · Ready' : esc(p.name) + (p.bot ? ' (bot)' : '')}</button>`).join('') : '';
   const meBtn = $('#readys [data-me]'); if (meBtn) meBtn.onclick = () => call({ action: 'ready' });
   $('#logClose').hidden = inEnd; $('#cnt').hidden = true;
   if (!inEnd && auto) { o.hidden = true; }
