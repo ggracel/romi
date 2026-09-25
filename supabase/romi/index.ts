@@ -118,8 +118,16 @@ Deno.serve(async (req) => {
 
     // akcije v igri
     const g = await loadGame(roomId); if (!g) throw ue("Igra še ni začeta.");
-    const seat = g.players.findIndex((p) => p.id === uid); if (seat < 0) throw ue("Nisi v tej igri.");
+    const seat = g.players.findIndex((p) => p.id === uid && !p.left); if (seat < 0) throw ue("Nisi več v tej igri.");
     let changed = false;
+    if (action === "quit") {
+      E.quit(g, seat, now);
+      // prosto mesto za druge sobe; admin preide na naslednjega človeka
+      await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", uid);
+      if (r.admin === uid) { const next = g.players.find((p) => !p.bot && !p.left); if (next) await admin.from("romi_rooms").update({ admin: next.id }).eq("id", roomId); }
+      await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
+      return ok({ quit: true });
+    }
     if (action === "pause" || action === "resume") {
       if (r.admin !== uid) throw ue("Samo admin lahko ustavi igro.");
       if (action === "pause" && !g.paused) { g.paused = true; g.pausedAt = now; g.log.push({ t: now, m: "Admin je ustavil igro (pavza)." }); changed = true; }

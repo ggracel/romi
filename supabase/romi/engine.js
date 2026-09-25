@@ -116,7 +116,7 @@ export function act(g, seat, a, now) {
   if (g.phase === 'roundEnd') err('Runda je končana, pritisni Ready.');
   if (g.paused) err('Igra je na pavzi.');
   if (seat !== g.turn) err('Nisi na potezi.');
-  const p = cur(g);
+  const p = cur(g); p.idle = 0;
   const hand = (id) => { const c = p.hand.find((x) => x === id); if (!c) err('Te karte nimaš v roki.'); return parse(c); };
   const remove = (id) => { p.hand.splice(p.hand.indexOf(id), 1); };
   switch (a.type) {
@@ -172,7 +172,7 @@ function nextTurn(g, now) {
   g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null;
 }
 export function autoMove(g, now) {
-  const p = cur(g);
+  const p = cur(g); if (!p.bot) p.idle = (p.idle || 0) + 1;
   if (g.phase === 'draw') { reshuffleIfEmpty(g); const c = g.deck.pop(); if (c) p.hand.push(c); g.phase = 'play'; }
   const nonJ = p.hand.filter((c) => !isJ(c));
   const pool = nonJ.length ? nonJ : p.hand;
@@ -186,8 +186,24 @@ export function autoMove(g, now) {
 }
 export function checkTimeout(g, now) {
   if (g.status !== 'playing' || g.phase === 'roundEnd' || g.phase === 'lobby' || g.paused) return false;
-  if (now - g.turnStarted >= g.turnTime * 1000) { autoMove(g, now); return true; }
+  if (now - g.turnStarted >= g.turnTime * 1000) { autoMove(g, now); checkAbandon(g, now); return true; }
   return false;
+}
+/* igralec, ki 3 poteze zapored ne odigra, velja za odsotnega; ko ni več nobenega prisotnega človeka, se igra konča (ne šteje v lestvico) */
+export function checkAbandon(g, now) {
+  if (g.status !== 'playing') return false;
+  const humans = g.players.filter((p) => !p.bot && !p.left);
+  if (humans.length && humans.some((p) => (p.idle || 0) < 3)) return false;
+  g.status = 'finished'; g.abandoned = true; g.log.push({ t: now, m: 'Igra je končana, ker ni več aktivnih igralcev.' });
+  return true;
+}
+/* igralec zapusti igro: namesto njega igra bot; če ne ostane noben človek, se igra konča */
+export function quit(g, seat, now) {
+  const p = g.players[seat]; if (!p || p.left) return;
+  p.left = true; p.bot = true; p.ready = true; p.name = p.name + ' (bot)';
+  g.log.push({ t: now, m: p.name.replace(' (bot)', '') + ' je zapustil igro, namesto njega igra bot.' });
+  if (g.phase === 'roundEnd' && g.players.every((x) => x.ready)) startRound(g, now);
+  checkAbandon(g, now);
 }
 function endRound(g, winnerSeat, now) {
   const rows = g.players.map((p) => {
@@ -218,7 +234,8 @@ export function view(g, seat, now) {
     paused: g.paused, now, deckCount: g.deck.length, discard: g.discard.slice(-1), discardCount: g.discard.length, drawnTop: g.drawnTop,
     melds: g.melds, rounds: g.rounds, roundEnd: g.roundEnd, roundStartedAt: g.roundStartedAt, log: g.log.slice(-12),
     turnsInRound: g.turnsInRound, playersCount: g.players.length,
-    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot })),
+    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot, left: !!p.left, idle: p.idle || 0 })),
+    abandoned: !!g.abandoned,
     me: me ? { seat: me.seat, hand: me.hand, opened: me.opened } : null,
   };
 }

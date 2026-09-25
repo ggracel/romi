@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=8';
+import * as E from './engine.js?v=9';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -69,6 +69,7 @@ if (!MOCK) {
     if (body.action === 'start') { M.game = E.newGame(M.players, M.rooms[0].turn_time, 500); M.game.starter = 0; E.startRound(M.game, now); M.rooms[0].status = 'playing'; notify(); botPlay(); return { view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'end') { M.game.status = 'finished'; M.rooms[0].status = 'finished'; notify(); return {}; }
     const g = M.game; if (!g) throw new Error('Igra še ni začeta.');
+    if (body.action === 'quit') { E.quit(g, 0, now); M.players = M.players.filter((p) => p.user_id !== 'me'); notify(); return { quit: true }; }
     if (body.action === 'pause') { g.paused = true; g.pausedAt = now; } else if (body.action === 'resume') { g.turnStarted += now - g.pausedAt; g.paused = false; botPlay(); }
     else if (body.action === 'view' || body.action === 'tick') { if (E.checkTimeout(g, now)) { botPlay(); notify(); } return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
     else { if (E.checkTimeout(g, now)) { botPlay(); throw new Error('Čas je potekel, poteza je bila odigrana samodejno.'); } E.act(g, 0, { type: body.action, ...body }, now); if (body.action === 'discard') botPlay(); if (g.phase === 'roundEnd') botsReady(); }
@@ -244,7 +245,7 @@ function render(prev) {
   const map = seatMap();
   $$('.zone').forEach((z) => { const seat = map[z.dataset.z]; if (seat === undefined) { z.hidden = true; return; } z.hidden = false; const p = v.players[seat];
     z.classList.toggle('turn', v.turn === seat && v.phase !== 'roundEnd');
-    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 14) }, () => '<div class="card back"></div>').join('') + '<b class="fan-n">' + p.handCount + '</b>' + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
+    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}${!p.bot && p.idle >= 2 ? ' · odsoten?' : ''}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 14) }, () => '<div class="card back"></div>').join('') + '<b class="fan-n">' + p.handCount + '</b>' + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
     const zm = z.querySelector('.zm'); const mine = v.melds.map((m, i) => [m, i]).filter(([m]) => m.owner === seat);
     if (!mine.length) zm.innerHTML = '<div class="none">' + (seat === v.me.seat ? 'Še nisi odprt. Izberi 3+ kart in klikni Položi.' : 'Še ni odprt') + '</div>';
     mine.forEach(([m, i]) => { const e = document.createElement('div'); e.className = 'meld'; e.dataset.mi = i; e.dataset.n = m.cards.length; const cs4 = m.cards.map((x) => parse(x.c)); const vv = validate(cs4); if (vv && vv.type === 'set' && m.cards.length === 4) e.classList.add('complete'); if (vv && vv.type === 'run' && m.cards.length >= 10) e.classList.add('complete');
@@ -279,7 +280,7 @@ function render(prev) {
   [['s1', myTurn && v.phase === 'draw' ? 'on' : myTurn ? 'done' : ''], ['s2', myTurn && v.phase === 'play' ? 'on' : ''], ['s3', myTurn && v.phase === 'play' && cs.length === 1 ? 'on' : '']].forEach(([id, c]) => ($('#' + id).className = 'step ' + c));
   // pavza, konec, dnevnik
   $('#pause').hidden = !v.paused; $('#bPause').textContent = v.paused ? 'Nadaljuj' : 'Pavza';
-  if (v.status === 'finished') { const w = v.players[v.winner]; $('#finT').textContent = w ? (w.seat === v.me.seat ? 'Zmagal si!' : w.name + ' je zmagal') : 'Igra je končana'; $('#finP').textContent = w ? w.score + ' točk · ' + v.round + ' rund' : 'Admin je končal igro.'; $('#fin').hidden = false; }
+  if (v.status === 'finished') { const w = v.abandoned ? null : v.players[v.winner]; $('#finT').textContent = w ? (w.seat === v.me.seat ? 'Zmagal si!' : w.name + ' je zmagal') : 'Igra je končana'; $('#finP').textContent = w ? w.score + ' točk · ' + v.round + ' rund' : v.abandoned ? 'Soba se je zaprla, ker ni bilo več aktivnih igralcev.' : 'Admin je končal igro.'; $('#fin').hidden = false; }
   else $('#fin').hidden = true;
   if (v.phase === 'roundEnd' && v.status === 'playing') showLog(true); else if (S.logAuto) { $('#log').hidden = true; S.logAuto = false; }
   // mini dnevnik
@@ -333,6 +334,7 @@ $('#bSort').onclick = () => { S.sort = S.sort === 'rank' ? 'suit' : 'rank'; appl
 $('#bPause').onclick = () => call({ action: S.view?.paused ? 'resume' : 'pause' }); $('#bResume').onclick = () => call({ action: 'resume' });
 $('#bEnd').onclick = () => { if (confirm('Res končaš igro za vse?')) call({ action: 'end' }); };
 $('#bLog').onclick = () => showLog(false);
+$('#bQuit').onclick = async () => { if (!confirm('Res zapustiš igro? Namesto tebe bo do konca igral bot, tvoje točke ne štejejo v lestvico.')) return; const r = await call({ action: 'quit' }); if (!r) return; clearInterval(timerIv); clearInterval(pollIv); unsubscribeRoom(); S.room = null; S.view = null; $('#fin').hidden = true; $('#log').hidden = true; toast('Zapustil si igro'); enterLobby(); };
 $('#logClose').onclick = () => { $('#log').hidden = true; };
 $('#finBack').onclick = () => { $('#fin').hidden = true; clearInterval(timerIv); clearInterval(pollIv); unsubscribeRoom(); S.room = null; S.view = null; enterLobby(); };
 document.addEventListener('keydown', (e) => { if (document.body.dataset.screen !== 'game' || e.target.tagName === 'INPUT') return; if (e.key === 'r' || e.key === 'R') $('#bSort').click(); if (e.key === 'Enter' && !$('#bLay').disabled) doLay(); if ((e.key === 'd' || e.key === 'D') && !$('#bDis').disabled) doDiscard(); if (e.key === 'Escape') { S.sel.clear(); S.order = []; render(); } });
