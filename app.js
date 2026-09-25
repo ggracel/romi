@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=7';
+import * as E from './engine.js?v=8';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -17,19 +17,32 @@ const S = { user: null, rooms: [], room: null, players: [], view: null, sel: new
 let sb = null, api, subscribeRooms, subscribeRoom, unsubscribeRoom, auth;
 if (!MOCK) {
   if (!window.supabase) { document.body.dataset.screen = 'login'; document.querySelector('[data-view="login"]').hidden = false; document.getElementById('lgErr').textContent = 'Knjižnica za prijavo se ni naložila. Osveži stran.'; throw new Error('supabase-js manjka'); }
-  sb = window.supabase.createClient(SB_URL, SB_KEY);
+  // Brez navigator.locks: ko je hub odprt v drugem zavihku, zaklep lahko zadrži romi in getSession vrne prazno.
+  sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, lock: async (_name, _timeout, fn) => fn() } });
+  let memSession = null;
+  sb.auth.onAuthStateChange((_e, s) => { if (s) memSession = s; });
+  async function token(force) {
+    let s = null;
+    if (!force) { try { s = (await sb.auth.getSession()).data.session; } catch (_) { s = null; } }
+    if (!s || force || (s.expires_at && s.expires_at * 1000 < Date.now() + 30000)) { try { const r = await sb.auth.refreshSession(); if (r.data.session) s = r.data.session; } catch (_) { /* naprej */ } }
+    if (!s && memSession && memSession.expires_at * 1000 > Date.now()) s = memSession;
+    if (s) memSession = s;
+    return s ? s.access_token : null;
+  }
+  async function post(body, tok) { const r = await fetch(SB_URL + '/functions/v1/romi', { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({ error: 'Strežnik ni odgovoril.' })); return { r, j }; }
   api = async (body) => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Prijavi se s foqs. računom.');
-    const r = await fetch(SB_URL + '/functions/v1/romi', { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({ error: 'Strežnik ni odgovoril.' }));
+    let tok = await token(false);
+    if (!tok) { needLogin(); throw new Error('Prijava je potekla. Prijavi se še enkrat.'); }
+    let { r, j } = await post(body, tok);
+    if (r.status === 401) { tok = await token(true); if (tok) ({ r, j } = await post(body, tok)); }
+    if (r.status === 401) { needLogin(); throw new Error('Prijava je potekla. Prijavi se še enkrat.'); }
     if (!r.ok) throw new Error(j.error || 'Napaka.');
     return j;
   };
   auth = {
-    async session() { const { data: { session } } = await sb.auth.getSession(); return session?.user ?? null; },
-    async login(email, password) { const { data, error } = await sb.auth.signInWithPassword({ email, password }); if (error) throw new Error('Napačen e-naslov ali geslo.'); return data.user; },
-    async logout() { await sb.auth.signOut(); },
+    async session() { let s = null; try { s = (await sb.auth.getSession()).data.session; } catch (_) {} if (!s) { try { s = (await sb.auth.refreshSession()).data.session; } catch (_) {} } if (s) memSession = s; return s?.user ?? null; },
+    async login(email, password) { const { data, error } = await sb.auth.signInWithPassword({ email, password }); if (error) throw new Error('Napačen e-naslov ali geslo.'); memSession = data.session; return data.user; },
+    async logout() { await sb.auth.signOut({ scope: 'local' }); },
   };
   let roomsCh = null, roomCh = null;
   subscribeRooms = (cb) => { if (roomsCh) return; roomsCh = sb.channel('romi-lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'romi_rooms' }, cb).on('postgres_changes', { event: '*', schema: 'public', table: 'romi_players' }, cb).subscribe(); };
@@ -104,6 +117,8 @@ function handOrdered(hand) {
 function applySort(mode) { const v = S.view; if (!v) return; S.handOrder = sortHand(v.me.hand.map(parse), mode).map((c) => c.id); render(); }
 
 /* ================= prijava ================= */
+let resumeAfterLogin = null;
+function needLogin() { if (document.body.dataset.screen === 'login') return; resumeAfterLogin = { screen: document.body.dataset.screen, room: S.room }; $('#lgErr').textContent = 'Prijava je potekla. Prijavi se še enkrat, nato nadaljuješ, kjer si ostal.'; $('#lgErr').className = 'authmsg err'; show('login'); }
 async function boot() {
   drawBg();
   const u = await auth.session();
@@ -112,7 +127,7 @@ async function boot() {
   await enterLobby();
 }
 $('#loginForm').addEventListener('submit', async (e) => { e.preventDefault(); const b = $('#lgBtn'); b.disabled = true; $('#lgErr').textContent = ''; $('#lgErr').className = 'authmsg';
-  try { S.user = await auth.login($('#lgEmail').value.trim(), $('#lgPass').value); $('#meName').textContent = myName(); $('#meIni').textContent = ini(myName()); await enterLobby(); } catch (err) { $('#lgErr').textContent = err.message; $('#lgErr').className = 'authmsg err'; } finally { b.disabled = false; } });
+  try { S.user = await auth.login($('#lgEmail').value.trim(), $('#lgPass').value); $('#meName').textContent = myName(); $('#meIni').textContent = ini(myName()); const rs = resumeAfterLogin; resumeAfterLogin = null; if (rs && rs.room) { S.room = rs.room; if (rs.screen === 'game') startGame(); else enterRoom(rs.room); } else if (rs && rs.screen === 'create') { show('create'); } else await enterLobby(); } catch (err) { $('#lgErr').textContent = err.message; $('#lgErr').className = 'authmsg err'; } finally { b.disabled = false; } });
 $('#btnLogout').onclick = async () => { await auth.logout(); location.reload(); };
 
 /* ================= sobe ================= */
