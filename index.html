@@ -2,14 +2,15 @@
 <html lang="sl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141112">
 <title>foqs.romi</title>
 <meta name="description" content="Romi - online kartna igra za prijatelje. Ena prijava za vse foqs. aplikacije.">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <script defer src="/track.js?v=2"></script>
 </head>
 <body data-screen="boot">
@@ -77,18 +78,22 @@
   <div class="brand-t sm">foqs.<b>romi</b><i>.</i></div>
   <div class="room-tag"><span>Soba <b id="gRoom"></b></span><span>Runda <b id="gRound"></b></span><span>Cilj <b id="gGoal">500</b></span></div>
   <div class="scores"><span id="scores" style="display:flex;gap:6px"></span><button class="btn" id="bLog" style="padding:5px 12px;font-size:12.5px;border-radius:99px;margin-left:6px">Dnevnik</button><button class="btn" id="bPause" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Pavza</button><button class="btn" id="bEnd" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Končaj igro</button><button class="btn" id="bQuit" style="padding:5px 12px;font-size:12.5px;border-radius:99px">Zapusti</button></div>
+  <button class="btn mnu" id="bMenu" aria-label="Meni">☰</button>
 </header>
+<div class="menu-shade" id="menuShade"></div>
 <main class="game">
   <div class="table">
+    <div class="zones">
     <div class="zone z-left" data-z="left"></div>
     <div class="zone z-top" data-z="top"></div>
     <div class="zone z-right" data-z="right"></div>
+    <div class="zone z-me" data-z="me"></div>
+    </div>
     <div class="center">
       <div class="pile" id="pDeck"><span class="lab">Kup</span><div class="stack"><div class="card back"><i class="q"></i></div><div class="card back"><i class="q"></i></div><div class="card back"><i class="q"></i></div></div><span class="n" id="deckN"></span></div>
       <div class="pile dis" id="pDis"><span class="lab">Odložene</span><div class="stack" id="disStack"></div><span class="n" id="disN"></span></div>
       <button class="take-all" id="bAll" hidden title="Vzemi cel kupček"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="16" rx="2"/><path d="M7 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2"/><path d="M9.5 15l3 3 3-3M12.5 11v7"/></svg><span>Vzemi vse<b id="bAllN"></b></span></button>
     </div>
-    <div class="zone z-me" data-z="me"></div>
   </div>
   <div class="me">
     <div class="hand-wrap"><div class="prev" id="prev"></div><div class="hand" id="hand"></div></div>
@@ -96,7 +101,7 @@
       <div class="me-st"><span class="step" id="s1"><i></i>Vleci</span><span class="step" id="s2"><i></i>Igraj</span><span class="step" id="s3"><i></i>Zavrzi</span></div>
       <div class="row"><div class="ring" style="width:48px;height:48px"><span data-timer>60</span></div><button class="btn" id="bSort">Razvrsti <kbd>R</kbd></button></div>
       <div class="row"><button class="btn pri" id="bLay">Položi <kbd>Enter</kbd></button></div>
-      <div class="row"><button class="btn warn" id="bDis">Zavrzi izbrano <kbd>D</kbd></button></div>
+      <div class="row"><button class="btn warn" id="bDis">Zavrzi<span class="dsk"> izbrano</span> <kbd>D</kbd></button></div>
     </div>
     <div class="mini-log" id="miniLog"></div>
   </div>
@@ -123,6 +128,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-<script type="module" src="app.js?v=9"></script>
+<script type="module" src="app.js?v=10"></script>
 </body>
 </html>

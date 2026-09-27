@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=9';
+import * as E from './engine.js?v=10';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -117,6 +117,36 @@ function handOrdered(hand) {
 }
 function applySort(mode) { const v = S.view; if (!v) return; S.handOrder = sortHand(v.me.hand.map(parse), mode).map((c) => c.id); render(); }
 
+/* ================= telefon / tablica ================= */
+function layoutMode() {
+  const w = innerWidth, h = innerHeight, b = document.body.classList; const mob = w < 1000 || h < 600;
+  b.toggle('mob', mob); b.toggle('por', mob && h >= w); b.toggle('land', mob && w > h); b.toggle('tab', mob && Math.min(w, h) >= 700);
+  if (!mob) b.remove('menu-open');
+}
+layoutMode();
+let rsT; addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { layoutMode(); if (S.view && document.body.dataset.screen === 'game') render(); }, 120); });
+/* roka na malem zaslonu: karte se razporedijo po širini, pokončno po potrebi v 2 vrsti */
+function fitHand() {
+  const h = $('#hand'); const cards = $$('#hand .card');
+  if (!document.body.classList.contains('mob')) { h.style.height = ''; cards.forEach((e) => { e.style.left = e.style.top = e.style.zIndex = ''; }); return; }
+  const cs = getComputedStyle(h); const cw = parseFloat(cs.getPropertyValue('--cw')) || 60, ch = parseFloat(cs.getPropertyValue('--ch')) || 84; const W = h.clientWidth; const n = cards.length;
+  const top = 14, gap = 8; const rows = document.body.classList.contains('por') && n * cw * 0.55 + cw * 0.45 > W ? 2 : 1; const per = Math.ceil(n / rows) || 1;
+  cards.forEach((e, i) => { const r = Math.floor(i / per), k = i - r * per, inRow = r === rows - 1 ? n - r * per : per; const step = inRow > 1 ? Math.min(cw + 6, (W - cw) / (inRow - 1)) : 0; const x0 = (W - (step * (inRow - 1) + cw)) / 2;
+    e.style.left = x0 + k * step + 'px'; e.style.top = top + r * (ch + gap) + 'px'; e.style.zIndex = i + 1; });
+  h.style.height = top + rows * ch + (rows - 1) * gap + 4 + 'px';
+}
+$('#bMenu').onclick = () => document.body.classList.toggle('menu-open');
+$('#menuShade').onclick = () => document.body.classList.remove('menu-open');
+$('.scores').addEventListener('click', (e) => { if (e.target.closest('button')) document.body.classList.remove('menu-open'); });
+/* zaslon ne ugasne med igro; ob vrnitvi v aplikacijo takoj osveži stanje */
+let wakeL = null;
+async function wake() { try { if ('wakeLock' in navigator && !wakeL && document.visibilityState === 'visible') { wakeL = await navigator.wakeLock.request('screen'); wakeL.addEventListener('release', () => (wakeL = null)); } } catch (_) { wakeL = null; } }
+function unwake() { try { if (wakeL) wakeL.release(); } catch (_) {} wakeL = null; }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !S.user) return; const sc = document.body.dataset.screen;
+  if (sc === 'game' && S.room) { call({ action: 'view' }, { quiet: true }); wake(); } else if (sc === 'lobby') loadRooms(); else if (sc === 'create' && S.room) refreshRoom();
+});
+
 /* ================= prijava ================= */
 let resumeAfterLogin = null;
 function needLogin() { if (document.body.dataset.screen === 'login') return; resumeAfterLogin = { screen: document.body.dataset.screen, room: S.room }; $('#lgErr').textContent = 'Prijava je potekla. Prijavi se še enkrat, nato nadaljuješ, kjer si ostal.'; $('#lgErr').className = 'authmsg err'; show('login'); }
@@ -142,7 +172,7 @@ async function loadRooms() {
   renderRooms();
 }
 async function enterLobby() {
-  show('lobby'); loadLeaderboard(); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
+  unwake(); document.body.classList.remove('menu-open'); show('lobby'); loadLeaderboard(); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
   // če sem že v sobi (npr. osvežitev strani), me vrni vanjo
   const mine = S.allPlayers.find((p) => p.user_id === S.user.id); const r = mine && S.rooms.find((x) => x.id === mine.room_id);
   if (r) enterRoom(r);
@@ -205,7 +235,7 @@ async function startGame() {
   $('#gRoom').textContent = S.room.name;
   const isAdmin = S.room.admin === S.user.id; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
   await call({ action: 'view' }, { quiet: true });
-  clearInterval(timerIv); timerIv = setInterval(tickTimer, 500);
+  clearInterval(timerIv); timerIv = setInterval(tickTimer, 500); wake();
   clearInterval(pollIv); pollIv = setInterval(() => { if (document.body.dataset.screen === 'game' && !S.busy) call({ action: 'view' }, { quiet: true }); }, 8000);
 }
 function applyView(v) {
@@ -265,6 +295,7 @@ function render(prev) {
   // roka
   const h = $('#hand'); const before = new Map(); $$('#hand .card').forEach((e) => before.set(e.dataset.id, e.getBoundingClientRect()));
   h.innerHTML = ''; handOrdered(v.me.hand.map(parse)).forEach((c) => { const e = cardEl(c, S.sel.has(c.id) ? 'sel' : ''); const o = document.createElement('span'); o.className = 'ord'; o.textContent = S.order.indexOf(c.id) + 1; e.appendChild(o); e.onclick = () => toggleSel(c.id); h.appendChild(e); });
+  fitHand();
   flipHand(before, prev);
   // predogled
   const pv = $('#prev');
@@ -397,6 +428,8 @@ function dealAnim() {
     if (pad && meld) doAdd(+meld.dataset.mi, pad.dataset.side); else if (meld && meld.classList.contains('swapable')) doAdd(+meld.dataset.mi, 'swap'); else if (meld && meld.classList.contains('can')) doAdd(+meld.dataset.mi); else if (dis && !$('#bDis').disabled) doDiscard();
     else if (hc && hc.dataset.id !== d.id) { const r = hc.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; const o = S.handOrder.filter((x) => x !== d.id); let idx = o.indexOf(hc.dataset.id) + (after ? 1 : 0); o.splice(idx, 0, d.id); S.handOrder = o; S.sel.clear(); S.order = []; render(); }
     else if (t.closest('#hand') || t.closest('.me')) { S.sel.clear(); S.order = []; render(); } });
+  // na telefonu lahko brskalnik prekine vlečenje (npr. drsenje strani): počisti
+  document.addEventListener('pointercancel', () => { if (!drag) return; const d = drag; drag = null; if (d.ghost) d.ghost.remove(); document.body.classList.remove('dragging'); $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const el = $(`#hand .card[data-id="${CSS.escape(d.id)}"]`); if (el) el.style.visibility = ''; });
 })();
 /* ozadje: poligoni, nariše se enkrat */
 function drawBg() { const c = $('#bg canvas'), x = c.getContext('2d'); function d() { c.width = innerWidth; c.height = innerHeight; x.clearRect(0, 0, c.width, c.height); const pts = []; for (let i = 0; i < 70; i++) pts.push([Math.random() * c.width, Math.random() * c.height]); x.strokeStyle = 'rgba(70,190,197,.07)'; x.lineWidth = 1; pts.forEach((p, i) => { pts.slice(i + 1).forEach((q) => { const dd = Math.hypot(p[0] - q[0], p[1] - q[1]); if (dd < 190) { x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(q[0], q[1]); x.stroke(); } }); }); } d(); addEventListener('resize', d); }
