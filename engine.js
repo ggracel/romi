@@ -209,7 +209,10 @@ export function startRound(g, now) {
   g.round++; g.deck = newDeck(g.seed ? rngFrom(g.seed + g.round) : Math.random); g.melds = []; g.roundEnd = null; g.turnsInRound = 0; g.drawnTop = null;
   g.players.forEach((p) => { p.hand = []; p.opened = false; p.ready = false; });
   for (let i = 0; i < 7; i++) g.players.forEach((p) => p.hand.push(g.deck.pop()));
-  g.discard = [g.deck.pop()];
+  // prva karta na kupčku ne sme biti joker: dvojko vrnemo v kup (na naključno mesto, ne na vrh) in obrnemo drugo
+  const rr = g.seed ? rngFrom(g.seed + g.round * 7 + 1) : Math.random;
+  let top = g.deck.pop(); while (isJ(top)) { g.deck.splice(Math.floor(rr() * g.deck.length), 0, top); top = g.deck.pop(); }
+  g.discard = [top];
   g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now; g.turnOpened = g.players[g.turn].opened;
   g.log.push({ t: now, m: 'Runda ' + g.round + ' se začne. Začne ' + g.players[g.turn].name + '.' });
 }
