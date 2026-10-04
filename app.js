@@ -7,7 +7,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const MOCK = new URLSearchParams(location.search).has('mock');
 const COLORS = ['var(--teal)', 'var(--warn)', 'var(--pos)', 'var(--viol)'];
 const $ = (s) => document.querySelector(s);
-const $$ = (s) => [...document.querySelectorAll(s)];
+const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const red = (s) => s === '♥' || s === '♦';
 
 /* ================= stanje klienta ================= */
@@ -29,7 +29,7 @@ if (!MOCK) {
     if (s) memSession = s;
     return s ? s.access_token : null;
   }
-  async function post(body, tok) { const r = await fetch(SB_URL + '/functions/v1/romi', { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({ error: 'Strežnik ni odgovoril.' })); return { r, j }; }
+  async function post(body, tok) { const r = await fetch(SB_URL + '/functions/v1/romi?forceFunctionRegion=eu-west-1', { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({ error: 'Strežnik ni odgovoril.' })); return { r, j }; }
   api = async (body) => {
     let tok = await token(false);
     if (!tok) { needLogin(); throw new Error('Prijava je potekla. Prijavi se še enkrat.'); }
@@ -108,10 +108,20 @@ function show(name) { document.body.dataset.screen = name; $$('.view').forEach((
 function ini(n) { return (n || '?').trim()[0].toUpperCase(); }
 function myName() { const m = S.user?.user_metadata || {}; return m.name || m.full_name || (S.user?.email || '').split('@')[0]; }
 async function call(body, { quiet } = {}) {
-  if (S.busy && !quiet) return null; S.busy = !quiet; document.body.classList.add('wait');
-  try { const r = await api({ room_id: S.room?.id, ...body }); if (r.view) applyView(r.view); if (r.players && !r.view) { S.room = r.room || S.room; S.players = r.players; if (document.body.dataset.screen === 'create') renderRoom(); } return r; }
+  if (S.busy && !quiet) return null; if (quiet && S.pending) return null; S.busy = !quiet; if (!quiet) document.body.classList.add('wait');
+  const my = ++S.seq;
+  try { const r = await api({ room_id: S.room?.id, ...body }); if (r.view && my > S.applied && !S.pending) { S.applied = my; applyView(r.view); } if (r.players && !r.view) { S.room = r.room || S.room; S.players = r.players; if (document.body.dataset.screen === 'create') renderRoom(); } return r; }
   catch (e) { if (!quiet) toast(e.message, 'bad'); else console.warn(e.message); return null; }
   finally { if (!quiet) S.busy = false; document.body.classList.remove('wait'); }
+}
+// poteze v igri: takoj lokalno, strežniku po vrsti (brez čakanja na odgovor prejšnje); pogled vzamemo samo iz zadnjega odgovora
+S.q = Promise.resolve(); S.pending = 0; S.seq = 0; S.applied = 0;
+function play(body) {
+  S.pending++; const my = ++S.seq;
+  const run = async () => { try { const r = await api({ room_id: S.room?.id, ...body }); if (r.view && S.pending === 1 && my > S.applied) { S.applied = my; applyView(r.view); } return r; }
+    catch (e) { toast(e.message, 'bad'); S.needSync = true; return null; }
+    finally { S.pending--; if (!S.pending && S.needSync) { S.needSync = false; call({ action: 'view' }, { quiet: true }); } } };
+  const p = S.q.then(run); S.q = p; return p;
 }
 
 /* ================= karte ================= */
@@ -279,7 +289,7 @@ function tickTimer() {
   const left = v.paused ? Math.ceil((v.turnTime * 1000 - (v.pausedAtLeft || 0)) / 1000) : turnLeft();
   $$('[data-timer]').forEach((e) => { e.textContent = left; e.style.setProperty('--p', left / v.turnTime); });
   $$('.ring').forEach((r) => r.classList.toggle('urgent', left <= 10 && left > 0 && !v.paused));
-  const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 1300) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 1200)); return; }
+  const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 1250) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 350)); return; }
   if (left <= 0 && !v.paused && !S.busy && !S.ticked) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 2000)); }
 }
 function selCards() { return S.order.map((id) => parse(id)); }
@@ -369,15 +379,15 @@ async function doDraw(from) { const v = S.view; if (!v || v.turn !== v.me.seat) 
   const r = await call({ action: 'draw', from }); if (!r) return;
   await anim;
   $$('#hand .card').forEach((e) => { if (!before.has(e.dataset.id)) e.animate([{ transform: 'translateY(-10px)', opacity: .6 }, { transform: 'none', opacity: 1 }], { duration: 220 }); }); }
-async function doLay() { const cs = selCards(); const vl = validate(cs); if (!vl) return toast('Izbor ni veljavna kombinacija', 'bad'); if (S.busy) return;
+async function doLay() { const cs = selCards(); const vl = validate(cs); if (!vl) return toast('Izbor ni veljavna kombinacija', 'bad');
   const v = S.view; const ids = cs.map((c) => c.id);
   const froms = {}; cs.forEach((c) => { const el = $(`#hand .card[data-id="${CSS.escape(c.id)}"]`); if (el) froms[c.id] = rectOf(el); });
   // lokalno takoj (enako kot strežnik), animacija steče brez čakanja
   v.melds.push({ owner: v.me.seat, cards: arrange(cs, vl).map((x) => ({ c: x.c.id, by: v.me.seat, as: x.as })) }); v.me.hand = v.me.hand.filter((id) => !ids.includes(id)); v.me.opened = true; S.sel.clear(); S.order = []; render();
   const meld = $(`.meld[data-mi="${v.melds.length - 1}"]`);
   if (meld) $$('.card', meld).forEach((e, i) => { const f = froms[e.dataset.id]; if (!f) return; e.style.visibility = 'hidden'; fly(e, f, rectOf(e), { delay: i * 50, dur: 380, rot: -6 }).then(() => { e.style.visibility = ''; e.animate([{ transform: 'scale(1.1)' }, { transform: 'none' }], { duration: 200 }); }); });
-  const r = await call({ action: 'lay', ids }); if (!r) await call({ action: 'view' }, { quiet: true }); }
-async function doAdd(mi, side) { const cs = selCards(); if (cs.length !== 1) return toast('Izberi eno karto za dodajanje'); if (!S.view.me.opened) return toast('Najprej moraš odpreti (položiti svojo kombinacijo)', 'bad'); if (S.busy) return;
+  play({ action: 'lay', ids }); }
+async function doAdd(mi, side) { const cs = selCards(); if (cs.length !== 1) return toast('Izberi eno karto za dodajanje'); if (!S.view.me.opened) return toast('Najprej moraš odpreti (položiti svojo kombinacijo)', 'bad');
   const v = S.view; const card = cs[0]; const m = v.melds[mi]; if (!m) return;
   const el = $(`#hand .card[data-id="${CSS.escape(card.id)}"]`); const f = el ? rectOf(el) : null;
   const opt = addOptions(meldObj(m), card); if (!opt) return toast('Ta karta ne paše v to kombinacijo', 'bad');
@@ -388,13 +398,13 @@ async function doAdd(mi, side) { const cs = selCards(); if (cs.length !== 1) ret
   const t = $(`.meld[data-mi="${mi}"] .card[data-id="${CSS.escape(card.id)}"]`);
   if (t && f) { t.style.visibility = 'hidden'; fly(t, f, rectOf(t), { dur: 380, rot: -6 }).then(() => { t.style.visibility = ''; t.closest('.meld').animate([{ boxShadow: '0 0 0 0 rgba(70,190,197,.6)' }, { boxShadow: '0 0 0 14px rgba(70,190,197,0)' }], { duration: 500 }); }); }
   if (joker && t) { const jn = $(`#hand .card[data-id="${CSS.escape(joker)}"]`); if (jn) { jn.style.visibility = 'hidden'; fly(jn, rectOf(t), rectOf(jn), { dur: 420, delay: 150, rot: 8 }).then(() => (jn.style.visibility = '')); toast('Zamenjal si jokerja, dvojka je v tvoji roki', 'ok'); } }
-  const r = await call({ action: 'add', meld: mi, id: card.id, side }); if (!r) await call({ action: 'view' }, { quiet: true }); }
-async function doDiscard() { const cs = selCards(); if (cs.length !== 1) return toast('Izberi točno eno karto za zavreči'); if (S.busy) return;
+  play({ action: 'add', meld: mi, id: card.id, side }); }
+async function doDiscard() { const cs = selCards(); if (cs.length !== 1) return toast('Izberi točno eno karto za zavreči');
   const v = S.view; const card = cs[0];
   const el = $(`#hand .card[data-id="${CSS.escape(card.id)}"]`); const from = el ? rectOf(el) : null; const to = rectOf($('#disStack'));
   v.me.hand = v.me.hand.filter((x) => x !== card.id); v.discard = [card.id]; v.discardCount++; v.phase = 'done'; S.sel.clear(); S.order = []; render();
   if (from) fly(cardEl(card), from, { x: to.x + 6, y: to.y - 6, w: from.w, h: from.h }, { rot: 12, dur: 360 });
-  const r = await call({ action: 'discard', id: card.id }); if (!r) await call({ action: 'view' }, { quiet: true }); }
+  play({ action: 'discard', id: card.id }); }
 $('#pDeck').onclick = () => doDraw('deck'); $('#disStack').onclick = () => doDraw('top'); $('#bAll').onclick = () => doDraw('all');
 $$('#pDis .split button').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); doDraw(b.dataset.from); }));
 $('#bLay').onclick = doLay; $('#bDis').onclick = doDiscard;
@@ -435,7 +445,7 @@ function rectOf(el) { const r = el.getBoundingClientRect(); return { x: r.left, 
 S.flying = new Set();
 function fly(node, from, to, { dur = 520, delay = 0, rot = 0 } = {}) {
   const fid = node && node.dataset ? node.dataset.id : null; if (fid) S.flying.add(fid);
-  return new Promise((res) => { const g = node.cloneNode(true); g.classList.add('ghost'); g.style.cssText += `;position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;--cw:${from.w}px;--ch:${from.h}px;margin:0;z-index:80;pointer-events:none;transform:none;visibility:visible`; document.body.appendChild(g);
+  return new Promise((res) => { const g = node.cloneNode(true); g.classList.add('ghost'); g.style.cssText += `;position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;--cw:${from.w}px;--ch:${from.h}px;margin:0;z-index:80;pointer-events:none;transform:none;transform-origin:0 0;visibility:visible`; document.body.appendChild(g);
     const dx = to.x - from.x, dy = to.y - from.y, sx = to.w / from.w, sy = to.h / from.h;
     g.animate([{ transform: 'translate(0,0) rotate(0deg)' }, { transform: `translate(${dx * .5}px,${dy * .5 - 40}px) rotate(${rot}deg) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: .5 }, { transform: `translate(${dx}px,${dy}px) rotate(0deg) scale(${sx},${sy})` }], { duration: dur, delay, easing: EASE, fill: 'forwards' }).onfinish = () => { g.remove(); if (fid) { S.flying.delete(fid); $$(`.meld .card[data-id="${CSS.escape(fid)}"], #hand .card[data-id="${CSS.escape(fid)}"]`).forEach((e) => (e.style.visibility = '')); } res(); }; });
 }

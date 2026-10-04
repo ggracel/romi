@@ -6,7 +6,7 @@ import * as E from "./engine.js";
 
 const ORIGINS = new Set(["https://foqs.si", "https://www.foqs.si", "https://ggracel.github.io", "http://127.0.0.1:4173", "http://localhost:4173", "http://127.0.0.1:5500", "http://localhost:5500"]);
 function cors(origin) {
-  return { "Access-Control-Allow-Origin": ORIGINS.has(origin) ? origin : "https://foqs.si", "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin", "Cache-Control": "no-store" };
+  return { "Access-Control-Allow-Origin": ORIGINS.has(origin) ? origin : "https://foqs.si", "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Max-Age": "7200", "Vary": "Origin", "Cache-Control": "no-store" };
 }
 const admin = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
 
@@ -58,6 +58,14 @@ async function wallet(uid) {
   const { data } = await admin.from("romi_wallet").select("*").eq("user_id", uid).single();
   return data;
 }
+// žeton je že preveril prehod (verify_jwt), zato ga tu samo preberemo, brez dodatnega klica na auth strežnik
+function jwtUser(token) {
+  try {
+    const b = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); const p = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b + "===".slice((b.length + 3) % 4)), (c) => c.charCodeAt(0))));
+    if (p.role !== "authenticated" || !p.sub || (p.exp && p.exp * 1000 < Date.now())) return null;
+    return { id: p.sub, email: p.email || "", user_metadata: p.user_metadata || {} };
+  } catch (_) { return null; }
+}
 function ue(m) { const e = new Error(m); e.user = true; return e; }
 function displayName(user) {
   const m = user.user_metadata || {};
@@ -71,9 +79,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "Samo POST." }), { status: 405, headers });
   try {
     const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-    const { data: ud, error: uerr } = await admin.auth.getUser(token);
-    if (uerr || !ud?.user) return new Response(JSON.stringify({ error: "Prijavi se s foqs. računom." }), { status: 401, headers });
-    const user = ud.user; const uid = user.id;
+    let user = jwtUser(token);
+    if (!user) { const { data: ud, error: uerr } = await admin.auth.getUser(token); if (uerr || !ud?.user) return new Response(JSON.stringify({ error: "Prijavi se s foqs. računom." }), { status: 401, headers }); user = ud.user; }
+    const uid = user.id;
     const body = await req.json().catch(() => ({}));
     const action = body.action; const now = Date.now();
 
@@ -165,7 +173,7 @@ Deno.serve(async (req) => {
     }
 
     const roomId = body.room_id; if (!roomId) throw ue("Manjka soba.");
-    const r = await room(roomId);
+    const [r, gPre] = await Promise.all([room(roomId), loadGame(roomId)]);
 
     if (action === "join") {
       if (r.private) throw ue("To je zasebna soba.");
@@ -223,7 +231,7 @@ Deno.serve(async (req) => {
     }
 
     // akcije v igri
-    const g = await loadGame(roomId); if (!g) throw ue("Igra še ni začeta.");
+    const g = gPre; if (!g) throw ue("Igra še ni začeta.");
     const seat = g.players.findIndex((p) => p.id === uid && !p.left); if (seat < 0) throw ue("Nisi več v tej igri.");
     let changed = false;
     if (action === "quit") {
