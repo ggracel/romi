@@ -29,6 +29,16 @@ async function players(roomId) {
   const { data } = await admin.from("romi_players").select("*").eq("room_id", roomId).order("seat");
   return data ?? [];
 }
+// trgovina: cene so samo na strežniku
+const SHOP = { back_classic: 0, face_classic: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+const DAILY_REW = [10, 15, 20, 25, 30, 40, 80];
+function today(d = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Ljubljana" }).format(d); }
+function yesterday() { return today(new Date(Date.now() - 864e5)); }
+async function wallet(uid) {
+  await admin.from("romi_wallet").upsert({ user_id: uid }, { onConflict: "user_id", ignoreDuplicates: true });
+  const { data } = await admin.from("romi_wallet").select("*").eq("user_id", uid).single();
+  return data;
+}
 function ue(m) { const e = new Error(m); e.user = true; return e; }
 function displayName(user) {
   const m = user.user_metadata || {};
@@ -59,10 +69,53 @@ Deno.serve(async (req) => {
       await admin.from("romi_players").insert(me);
       return ok({ room: r, players: [me] });
     }
+    /* ---------- cekini, trgovina, dnevni izziv ---------- */
+    if (action === "wallet") {
+      const w = await wallet(uid); const d = today();
+      const s = w.last_daily === yesterday() ? w.streak + 1 : Math.max(w.streak - 1, 0) + 1; const ns = s > 7 ? 1 : s;
+      const { data: dr } = await admin.from("romi_daily_results").select("*").eq("day", d).eq("user_id", uid).maybeSingle();
+      return ok({ wallet: w, today: d, dailyAvail: w.last_daily !== d, nextDaily: { streak: ns, amount: DAILY_REW[ns - 1] }, dailyResult: dr || null });
+    }
+    if (action === "claim_daily") {
+      const { data, error } = await admin.rpc("romi_claim_daily", { p_user: uid }); if (error) throw error;
+      return ok({ claim: data, wallet: await wallet(uid) });
+    }
+    if (action === "buy") {
+      const item = String(body.item || ""); if (!(item in SHOP) || !SHOP[item]) throw ue("Tega v trgovini ni.");
+      const { data, error } = await admin.rpc("romi_buy", { p_user: uid, p_item: item, p_price: SHOP[item] }); if (error) throw error;
+      if (!data.ok) throw ue(data.error);
+      return ok({ wallet: await wallet(uid) });
+    }
+    if (action === "equip") {
+      const item = String(body.item || ""); const w = await wallet(uid);
+      if (!w.owned.includes(item)) throw ue("Tega še nimaš.");
+      const [kind, name] = item.split("_"); if (!["back", "face"].includes(kind)) throw ue("Napačen predmet.");
+      await admin.from("romi_wallet").update({ [kind]: name, updated_at: new Date().toISOString() }).eq("user_id", uid);
+      return ok({ wallet: await wallet(uid) });
+    }
+    if (action === "daily_start") {
+      const d = today();
+      const { data: had } = await admin.from("romi_daily_results").select("day").eq("day", d).eq("user_id", uid).maybeSingle();
+      if (had) throw ue("Današnji izziv si že odigral. Nov bo jutri.");
+      const { data: mine } = await admin.from("romi_players").select("room_id, romi_rooms!inner(status)").eq("user_id", uid);
+      if ((mine || []).some((x) => x.romi_rooms?.status === "playing")) throw ue("Najprej dokončaj igro, ki jo igraš.");
+      await admin.from("romi_players").delete().eq("user_id", uid);
+      const { data: rr, error } = await admin.from("romi_rooms").insert({ name: "Dnevni izziv", admin: uid, turn_time: 120, private: true }).select().single();
+      if (error) throw error;
+      const ps = [{ room_id: rr.id, user_id: uid, name: displayName(user), seat: 0, is_bot: false }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Bot Ana", seat: 1, is_bot: true }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Bot Bor", seat: 2, is_bot: true }];
+      await admin.from("romi_players").insert(ps);
+      const g = E.newGame(ps, 120, 9999); g.seed = E.seedOf("romi-" + d); g.maxRounds = 1; g.daily = d; g.starter = 0;
+      E.startRound(g, now);
+      await saveGame(rr.id, g);
+      await Promise.all([bump(rr.id, { status: "playing" }), admin.from("romi_daily_results").insert({ day: d, user_id: uid, name: displayName(user), room_id: rr.id })]);
+      return ok({ room: { ...rr, status: "playing" }, view: E.view(g, 0, now) });
+    }
+
     const roomId = body.room_id; if (!roomId) throw ue("Manjka soba.");
     const r = await room(roomId);
 
     if (action === "join") {
+      if (r.private) throw ue("To je zasebna soba.");
       if (r.status !== "waiting") throw ue("Igra v tej sobi že teče.");
       const ps = await players(roomId);
       if (ps.some((p) => p.user_id === uid)) return ok({ room: r });
@@ -144,6 +197,17 @@ Deno.serve(async (req) => {
       if (g.status === "finished" && g.finishedNaturally && !g.statsDone) {
         g.statsDone = true;
         await Promise.all(g.players.filter((p) => !p.bot).map((p) => admin.rpc("romi_add_stat", { p_user: p.id, p_name: p.name, p_points: p.score, p_win: p.seat === g.winner })));
+      }
+      // cekini: enkrat ob koncu igre (naravno končane ali dnevni izziv)
+      if (g.status === "finished" && !g.coinsDone && !g.abandoned && (g.finishedNaturally || g.daily)) {
+        g.coinsDone = true; g.awards = {};
+        const aw = E.computeAwards(g) || {};
+        for (const [st, a] of Object.entries(aw)) {
+          const p = g.players[+st];
+          const { data: got } = await admin.rpc("romi_award", { p_user: p.id, p_amount: a.total, p_reason: g.daily ? "daily_game" : "game", p_meta: { room: roomId, parts: a.parts }, p_bot: !!a.solo });
+          g.awards[st] = { ...a, credited: got ?? 0, limited: !!a.solo && !got && a.total > 0 };
+          if (g.daily) await admin.from("romi_daily_results").update({ score: g.rounds[0]?.[+st] ?? p.score, won: a.place === 0 }).eq("day", g.daily).eq("user_id", p.id);
+        }
       }
       await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
     }

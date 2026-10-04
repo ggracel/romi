@@ -83,6 +83,33 @@ export function tableVal(x) {
   return val({ r: x.as.r, s: x.as.s === '?' ? '♠' : x.as.s });
 }
 
+/* ================= cekini ================= */
+// dobre poteze med igro (štejejo samo ljudem, izplačajo se ob koncu igre)
+export const COIN_EV = { out: { n: 10, label: 'Šel si ven' }, handOut: { n: 25, label: 'Ven naenkrat, iz roke' }, swap: { n: 3, label: 'Zamenjava jokerja' }, set4: { n: 5, label: 'Set štirih enakih' } };
+function ev(p, k) { if (!p || p.bot) return; p.ev = p.ev || {}; p.ev[k] = (p.ev[k] || 0) + 1; }
+export function evCoins(p) { return Object.entries(p.ev || {}).reduce((a, [k, n]) => a + (COIN_EV[k] ? COIN_EV[k].n * n : 0), 0); }
+// nagrade ob koncu igre (izračun je enak na strežniku in v testnem načinu; strežnik doda še dnevno omejitev za igre z boti)
+export function computeAwards(g) {
+  if (g.status !== 'finished' || g.abandoned || !(g.finishedNaturally || g.daily)) return null;
+  const humans = g.players.filter((p) => !p.bot && !p.left);
+  const solo = !g.daily && humans.length === 1;
+  const order = [...g.players].sort((a, b) => b.score - a.score);
+  const out = {};
+  for (const p of humans) {
+    const place = order.findIndex((x) => x.seat === p.seat);
+    const parts = [];
+    if (g.daily) { parts.push({ label: 'Dnevni izziv odigran', n: 20 }); if (place === 0) parts.push({ label: 'Premagal si bote', n: 30 }); }
+    else { parts.push({ label: 'Odigrana igra', n: 20 }); const pb = [60, 30, 15][place]; if (pb) parts.push({ label: (place + 1) + '. mesto', n: pb }); }
+    for (const [k, n] of Object.entries(p.ev || {})) if (COIN_EV[k] && n) parts.push({ label: COIN_EV[k].label + (n > 1 ? ' ×' + n : ''), n: COIN_EV[k].n * n });
+    let total = parts.reduce((a, x) => a + x.n, 0);
+    if (solo) total = Math.floor(total / 2);
+    out[p.seat] = { total, parts, solo, place };
+  }
+  return out;
+}
+function rngFrom(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export function seedOf(str) { let h = 2166136261; for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
 /* ================= stanje igre ================= */
 export function newGame(players, turnTime, goal) {
   return {
@@ -93,11 +120,11 @@ export function newGame(players, turnTime, goal) {
   };
 }
 export function startRound(g, now) {
-  g.round++; g.deck = newDeck(); g.melds = []; g.roundEnd = null; g.turnsInRound = 0; g.drawnTop = null;
+  g.round++; g.deck = newDeck(g.seed ? rngFrom(g.seed + g.round) : Math.random); g.melds = []; g.roundEnd = null; g.turnsInRound = 0; g.drawnTop = null;
   g.players.forEach((p) => { p.hand = []; p.opened = false; p.ready = false; });
   for (let i = 0; i < 7; i++) g.players.forEach((p) => p.hand.push(g.deck.pop()));
   g.discard = [g.deck.pop()];
-  g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now;
+  g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now; g.turnOpened = g.players[g.turn].opened;
   g.log.push({ t: now, m: 'Runda ' + g.round + ' se začne. Začne ' + g.players[g.turn].name + '.' });
 }
 function reshuffleIfEmpty(g) {
@@ -135,7 +162,7 @@ export function act(g, seat, a, now) {
       const keep = g.turnsInRound < g.players.length ? 2 : 1;
       if (p.hand.length - cs.length < keep) err(keep === 2 ? 'V prvem krogu ne moreš iti ven: obdrži vsaj 2 karti.' : 'Eno karto moraš obdržati za zavreči.');
       g.melds.push({ owner: seat, cards: arrange(cs, v).map((x) => ({ c: x.c.id, by: seat, as: x.as })) });
-      ids.forEach(remove); p.opened = true; g.log.push({ t: now, m: p.name + ' je položil: ' + v.label + '.' }); return;
+      ids.forEach(remove); p.opened = true; if (v.mode === 'set' && cs.length === 4) ev(p, 'set4'); g.log.push({ t: now, m: p.name + ' je položil: ' + v.label + '.' }); return;
     }
     case 'add': {
       if (g.phase !== 'play') err('Najprej potegni karto.');
@@ -146,14 +173,14 @@ export function act(g, seat, a, now) {
       const opt = addOptions(mm, card); if (!opt) err('Ta karta ne paše v to kombinacijo.');
       if (opt.swap !== undefined) {
         const old = m.cards[opt.swap]; const joker = old.c;
-        m.cards[opt.swap] = { c: card.id, by: old.by, as: null }; remove(card.id); p.hand.push(joker);
+        m.cards[opt.swap] = { c: card.id, by: old.by, as: null }; remove(card.id); p.hand.push(joker); ev(p, 'swap');
         g.log.push({ t: now, m: p.name + ' je s ' + card.id + ' zamenjal jokerja pri ' + g.players[m.owner].name + '.' }); return;
       }
       const keepA = g.turnsInRound < g.players.length ? 2 : 1;
       if (p.hand.length - 1 < keepA) err(keepA === 2 ? 'V prvem krogu ne moreš iti ven: obdrži vsaj 2 karti.' : 'Eno karto moraš obdržati za zavreči.');
       const arr = a.side === 'lo' && opt.lo ? opt.lo.arr : a.side === 'hi' && opt.hi ? opt.hi.arr : opt.auto;
       m.cards = arr.map((x) => { const o = m.cards.find((y) => y.c === x.c.id); return { c: x.c.id, by: o ? o.by : seat, as: x.as }; });
-      remove(card.id); g.log.push({ t: now, m: p.name + ' je dodal ' + card.id + ' k ' + g.players[m.owner].name + '.' }); return;
+      remove(card.id); if (opt.test && opt.test.mode === 'set' && m.cards.length === 4) ev(p, 'set4'); g.log.push({ t: now, m: p.name + ' je dodal ' + card.id + ' k ' + g.players[m.owner].name + '.' }); return;
     }
     case 'discard': {
       if (g.phase !== 'play') err('Najprej potegni karto.');
@@ -169,7 +196,7 @@ export function act(g, seat, a, now) {
   }
 }
 function nextTurn(g, now) {
-  g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null;
+  g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; g.turnOpened = g.players[g.turn].opened;
 }
 export function autoMove(g, now) {
   const p = cur(g); if (!p.bot) p.idle = (p.idle || 0) + 1;
@@ -206,6 +233,7 @@ export function quit(g, seat, now) {
   checkAbandon(g, now);
 }
 function endRound(g, winnerSeat, now) {
+  const wp = g.players[winnerSeat]; ev(wp, 'out'); if (g.turnOpened === false && g.turn === winnerSeat) ev(wp, 'handOut');
   const rows = g.players.map((p) => {
     const tc = g.melds.flatMap((m) => m.cards).filter((x) => x.by === p.seat);
     const table = tc.reduce((a, x) => a + tableVal({ c: parse(x.c), as: x.as }), 0);
@@ -219,6 +247,7 @@ function endRound(g, winnerSeat, now) {
   g.log.push({ t: now, m: g.players[winnerSeat].name + ' je šel ven. Konec runde ' + g.round + '.' });
   const over = g.players.filter((p) => p.score >= g.goal);
   if (over.length) { const w = over.sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.finishedNaturally = true; g.log.push({ t: now, m: w.name + ' je zmagal igro s ' + w.score + ' točkami!' }); }
+  else if (g.maxRounds && g.rounds.length >= g.maxRounds) { const w = [...g.players].sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.log.push({ t: now, m: 'Dnevni izziv je končan. Največ točk: ' + w.name + ' (' + w.score + ').' }); }
 }
 function ready(g, seat, now) {
   if (g.phase !== 'roundEnd') err('Runda še teče.');
@@ -235,8 +264,8 @@ export function view(g, seat, now) {
     melds: g.melds, rounds: g.rounds, roundEnd: g.roundEnd, roundStartedAt: g.roundStartedAt, log: g.log.slice(-12),
     turnsInRound: g.turnsInRound, playersCount: g.players.length,
     players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot, left: !!p.left, idle: p.idle || 0 })),
-    abandoned: !!g.abandoned,
-    me: me ? { seat: me.seat, hand: me.hand, opened: me.opened } : null,
+    abandoned: !!g.abandoned, daily: g.daily || null,
+    me: me ? { seat: me.seat, hand: me.hand, opened: me.opened, ev: me.ev || {}, coins: evCoins(me), award: (g.awards && g.awards[me.seat]) || null } : null,
   };
 }
 
@@ -257,7 +286,7 @@ export function botStep(g, now) {
         const mm = { cards: g.melds[mi].cards.map((x) => ({ c: parse(x.c), by: x.by, as: x.as })) }; if (addOptions(mm, parse(id))) { try { act(g, g.turn, { type: 'add', meld: mi, id }, now); added = true; } catch (_e) { /* ni šlo */ } } } if (added) break; } } }
     const nonJ = p.hand.filter((c) => !isJ(c)); const pool = nonJ.length ? nonJ : p.hand;
     const cantFinish = p.hand.length === 1 && g.turnsInRound < g.players.length;
-    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; return true; }
+    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; g.turnOpened = g.players[g.turn].opened; return true; }
     act(g, g.turn, { type: 'discard', id: pool[Math.floor(Math.random() * pool.length)] }, now);
   } catch (e) { g.log.push({ t: now, m: 'Bot ' + p.name + ' napaka: ' + e.message }); autoMove(g, now); }
   return true;

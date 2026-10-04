@@ -59,9 +59,20 @@ if (!MOCK) {
         for (let a = 0; a < hand.length && !laid; a++) for (let b = a + 1; b < hand.length && !laid; b++) for (let c = b + 1; c < hand.length && !laid; c++) { const cs = [hand[a], hand[b], hand[c]]; if (validate(cs) && p.hand.length > 3) { E.act(g2, g2.turn, { type: 'lay', ids: cs.map((x) => x.id) }, now); laid = true; } }
         const nonJ = p.hand.filter((c) => !isJ(c)); const pool = nonJ.length ? nonJ : p.hand; E.act(g2, g2.turn, { type: 'discard', id: pool[0] }, now);
       } catch (e) { console.warn('bot', e.message); E.checkTimeout(g2, now + 999999); }
-      notify(); botPlay(); }, 1500 + Math.random() * 1500); };
+      mockAward(g2); notify(); botPlay(); }, 1500 + Math.random() * 1500); };
   const botsReady = () => setTimeout(() => { const g = M.game; if (g && g.phase === 'roundEnd') { g.players.forEach((p) => { if (p.id !== 'me') p.ready = true; }); if (g.players.every((p) => p.ready)) { E.startRound(g, Date.now()); botPlay(); } notify(); } }, 2500);
+  const mDay = () => new Date().toISOString().slice(0, 10);
+  M.wallet = { coins: 340, streak: 2, last_daily: '', owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic' }; M.dailyResult = null;
+  const MSHOP = { back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+  const mockAward = (g) => { if (g && g.status === 'finished' && !g.coinsDone && !g.abandoned && (g.finishedNaturally || g.daily)) { g.coinsDone = true; g.awards = {}; const aw = E.computeAwards(g) || {}; for (const [st, a] of Object.entries(aw)) { g.awards[st] = { ...a, credited: a.total, limited: false }; if (g.players[+st].id === 'me') { M.wallet.coins += a.total; if (g.daily) M.dailyResult = { ...M.dailyResult, score: g.rounds[0][+st], won: a.place === 0 }; } } } };
   api = async (body) => { const now = Date.now(); await new Promise((r) => setTimeout(r, 80));
+    if (body.action === 'wallet') { const w = M.wallet; return { wallet: { ...w }, today: mDay(), dailyAvail: w.last_daily !== mDay(), nextDaily: { streak: w.streak + 1, amount: [10, 15, 20, 25, 30, 40, 80][w.streak] }, dailyResult: M.dailyResult }; }
+    if (body.action === 'claim_daily') { const w = M.wallet; if (w.last_daily === mDay()) return { claim: { ok: false }, wallet: { ...w } }; w.streak++; const amt = [10, 15, 20, 25, 30, 40, 80][w.streak - 1]; w.coins += amt; w.last_daily = mDay(); return { claim: { ok: true, amount: amt, streak: w.streak }, wallet: { ...w } }; }
+    if (body.action === 'buy') { const w = M.wallet; const pr = MSHOP[body.item]; if (!pr) throw new Error('Tega v trgovini ni.'); if (w.owned.includes(body.item)) throw new Error('To že imaš.'); if (w.coins < pr) throw new Error('Premalo cekinov.'); w.coins -= pr; w.owned.push(body.item); return { wallet: { ...w } }; }
+    if (body.action === 'equip') { const w = M.wallet; if (!w.owned.includes(body.item)) throw new Error('Tega še nimaš.'); const [k, n] = body.item.split('_'); w[k] = n; return { wallet: { ...w } }; }
+    if (body.action === 'daily_start') { if (M.dailyResult) throw new Error('Današnji izziv si že odigral. Nov bo jutri.'); const ps = [{ user_id: 'me', name: 'Gašper', seat: 0 }, { user_id: 'b1', name: 'Bot Ana', seat: 1, is_bot: true }, { user_id: 'b2', name: 'Bot Bor', seat: 2, is_bot: true }];
+      M.game = E.newGame(ps, 120, 9999); M.game.seed = E.seedOf('romi-' + mDay()); M.game.maxRounds = 1; M.game.daily = mDay(); M.game.starter = 0; M.game.players.forEach((p, i) => (p.bot = i > 0)); E.startRound(M.game, now);
+      M.dailyRoom = { id: 'd1', name: 'Dnevni izziv', admin: 'me', turn_time: 120, goal: 9999, status: 'playing', private: true }; M.dailyResult = { score: null }; botPlay(); return { room: M.dailyRoom, view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'create') { M.rooms[0] = { ...M.rooms[0], name: body.name, turn_time: body.turn_time, status: 'waiting' }; M.game = null; notify(); return { room: M.rooms[0] }; }
     if (body.action === 'join') return { room: M.rooms[0] };
     if (body.action === 'leave') return {};
@@ -71,14 +82,14 @@ if (!MOCK) {
     const g = M.game; if (!g) throw new Error('Igra še ni začeta.');
     if (body.action === 'quit') { E.quit(g, 0, now); M.players = M.players.filter((p) => p.user_id !== 'me'); notify(); return { quit: true }; }
     if (body.action === 'pause') { g.paused = true; g.pausedAt = now; } else if (body.action === 'resume') { g.turnStarted += now - g.pausedAt; g.paused = false; botPlay(); }
-    else if (body.action === 'view' || body.action === 'tick') { if (E.checkTimeout(g, now)) { botPlay(); notify(); } return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
+    else if (body.action === 'view' || body.action === 'tick') { if (E.checkTimeout(g, now)) { botPlay(); notify(); } mockAward(g); return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
     else { if (E.checkTimeout(g, now)) { botPlay(); throw new Error('Čas je potekel, poteza je bila odigrana samodejno.'); } E.act(g, 0, { type: body.action, ...body }, now); if (body.action === 'discard') botPlay(); if (g.phase === 'roundEnd') botsReady(); }
-    notify(); return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; };
+    mockAward(g); notify(); return { view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; };
   auth = { async session() { return { id: 'me', email: 'gasper@foqs.si', user_metadata: { name: 'Gašper' } }; }, async login() { return this.session(); }, async logout() {} };
   subscribeRooms = (cb) => M.cbs.add(cb); subscribeRoom = (id, cb) => M.cbs.add(cb); unsubscribeRoom = () => {};
   window.__mock = M;
   // sobe/igralci v mocku beremo iz M namesto iz baze
-  window.__mockRooms = () => ({ rooms: M.rooms, players: M.players });
+  window.__mockRooms = () => ({ rooms: M.rooms, players: M.players, dailyRoom: M.dailyRoom });
 }
 
 /* ================= pomožno ================= */
@@ -166,7 +177,7 @@ async function loadRooms() {
   if (MOCK) { const m = window.__mockRooms(); S.rooms = m.rooms.filter((r) => r.status !== 'finished'); S.allPlayers = m.players; }
   else {
     const since = new Date(Date.now() - 24 * 3600e3).toISOString();
-    const [{ data: rooms }, { data: players }] = await Promise.all([sb.from('romi_rooms').select('*').neq('status', 'finished').gt('updated_at', since).order('created_at', { ascending: false }), sb.from('romi_players').select('*')]);
+    const [{ data: rooms }, { data: players }] = await Promise.all([sb.from('romi_rooms').select('*').eq('private', false).neq('status', 'finished').gt('updated_at', since).order('created_at', { ascending: false }), sb.from('romi_players').select('*')]);
     S.rooms = rooms || []; S.allPlayers = players || [];
   }
   renderRooms();
@@ -174,8 +185,11 @@ async function loadRooms() {
 async function enterLobby() {
   unwake(); document.body.classList.remove('menu-open'); show('lobby'); loadLeaderboard(); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
   // če sem že v sobi (npr. osvežitev strani), me vrni vanjo
+  loadWallet();
   const mine = S.allPlayers.find((p) => p.user_id === S.user.id); const r = mine && S.rooms.find((x) => x.id === mine.room_id);
-  if (r) enterRoom(r);
+  if (r) return enterRoom(r);
+  // dnevni izziv (zasebna soba) po osvežitvi strani: vrni se v igro
+  if (mine && !MOCK) { const { data: pr } = await sb.from('romi_rooms').select('*').eq('id', mine.room_id).maybeSingle(); if (pr && pr.private && pr.status === 'playing') { S.room = pr; subscribeRoom(pr.id, () => refreshRoom()); startGame(); } }
 }
 function renderRooms() {
   const el = $('#rooms'); const uid = S.user.id;
@@ -203,7 +217,7 @@ async function enterRoom(r) {
 }
 async function refreshRoom() {
   if (!S.room) return;
-  if (MOCK) { const m = window.__mockRooms(); S.room = m.rooms[0]; S.players = m.players; }
+  if (MOCK) { const m = window.__mockRooms(); if (S.room.private) return; S.room = m.rooms[0]; S.players = m.players; }
   else {
     const [{ data: r }, { data: ps }] = await Promise.all([sb.from('romi_rooms').select('*').eq('id', S.room.id).maybeSingle(), sb.from('romi_players').select('*').eq('room_id', S.room.id).order('seat')]);
     if (!r) { toast('Soba je bila zaprta'); unsubscribeRoom(); S.room = null; return enterLobby(); }
@@ -233,7 +247,7 @@ let timerIv = null, pollIv = null;
 async function startGame() {
   show('game'); S.sel.clear(); S.order = []; S.prevTurn = null; S.prevRound = 0;
   $('#gRoom').textContent = S.room.name;
-  const isAdmin = S.room.admin === S.user.id; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
+  const isAdmin = S.room.admin === S.user.id && !S.room.private; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
   await call({ action: 'view' }, { quiet: true });
   clearInterval(timerIv); timerIv = setInterval(tickTimer, 500); wake();
   clearInterval(pollIv); pollIv = setInterval(() => { if (document.body.dataset.screen === 'game' && !S.busy) call({ action: 'view' }, { quiet: true }); }, 8000);
@@ -268,7 +282,9 @@ function render(prev) {
   const v = S.view; if (!v) return;
   const myTurn = v.turn === v.me.seat && v.phase !== 'roundEnd' && v.status === 'playing';
   const cs = selCards(); const val3 = validate(cs);
-  $('#gRound').textContent = v.round; $('#gGoal').textContent = v.goal;
+  $('#gRound').textContent = v.round; $('#gGoal').textContent = v.daily ? '1 runda' : v.goal;
+  $('#gCoin').textContent = v.me.coins || 0;
+  if (prev && prev.me && (v.me.coins || 0) > (prev.me.coins || 0)) { const k = Object.keys(v.me.ev || {}).find((x) => (v.me.ev[x] || 0) > ((prev.me.ev || {})[x] || 0)); coinPop(v.me.coins - (prev.me.coins || 0), k && E.COIN_EV[k] ? E.COIN_EV[k].label : 'Dobra poteza'); }
   $('#scores').innerHTML = v.players.map((p) => `<span class="chip"><i style="background:${COLORS[p.seat]}">${ini(p.name)}</i>${esc(p.name)} <em>${p.score}</em></span>`).join('');
   $('#deckN').textContent = v.deckCount + ' kart'; $('#disN').textContent = v.discardCount + ' kart';
   const ds = $('#disStack'); ds.innerHTML = ''; for (let k = 0; k < Math.min(2, v.discardCount - 1); k++) { const b = document.createElement('div'); b.className = 'card blank'; ds.appendChild(b); } v.discard.forEach((c) => ds.appendChild(cardEl(c)));
@@ -314,7 +330,9 @@ function render(prev) {
   [['s1', myTurn && v.phase === 'draw' ? 'on' : myTurn ? 'done' : ''], ['s2', myTurn && v.phase === 'play' ? 'on' : ''], ['s3', myTurn && v.phase === 'play' && cs.length === 1 ? 'on' : '']].forEach(([id, c]) => ($('#' + id).className = 'step ' + c));
   // pavza, konec, dnevnik
   $('#pause').hidden = !v.paused; $('#bPause').textContent = v.paused ? 'Nadaljuj' : 'Pavza';
-  if (v.status === 'finished') { const w = v.abandoned ? null : v.players[v.winner]; $('#finT').textContent = w ? (w.seat === v.me.seat ? 'Zmagal si!' : w.name + ' je zmagal') : 'Igra je končana'; $('#finP').textContent = w ? w.score + ' točk · ' + v.round + ' rund' : v.abandoned ? 'Soba se je zaprla, ker ni bilo več aktivnih igralcev.' : 'Admin je končal igro.'; $('#fin').hidden = false; }
+  if (v.status === 'finished') { renderAward(v); }
+  if (v.status === 'finished' && v.daily) { const mine = v.players[v.me.seat]; const order = [...v.players].sort((a, b) => b.score - a.score); const pl = order.findIndex((p) => p.seat === v.me.seat) + 1; $('#finT').textContent = v.abandoned ? 'Izziv ni dokončan' : pl === 1 ? 'Premagal si bote!' : 'Izziv končan'; $('#finP').textContent = v.abandoned ? 'Igra se je zaprla, ker nisi igral. Nov izziv bo jutri.' : 'Tvoj rezultat: ' + mine.score + ' točk · ' + pl + '. mesto od ' + v.players.length + '. Lestvico dneva vidiš v sobah.'; $('#fin').hidden = false; }
+  else if (v.status === 'finished') { const w = v.abandoned ? null : v.players[v.winner]; $('#finT').textContent = w ? (w.seat === v.me.seat ? 'Zmagal si!' : w.name + ' je zmagal') : 'Igra je končana'; $('#finP').textContent = w ? w.score + ' točk · ' + v.round + ' rund' : v.abandoned ? 'Soba se je zaprla, ker ni bilo več aktivnih igralcev.' : 'Admin je končal igro.'; $('#fin').hidden = false; }
   else $('#fin').hidden = true;
   if (v.phase === 'roundEnd' && v.status === 'playing') showLog(true); else if (S.logAuto) { $('#log').hidden = true; S.logAuto = false; }
   // mini dnevnik
@@ -439,6 +457,75 @@ function drawBg() { const c = $('#bg canvas'), x = c.getContext('2d'); function 
 
 boot();
 window.__S = S;
+
+/* ================= cekini, trgovina, dnevni izziv ================= */
+const SHOP = [
+  { id: 'back_classic', kind: 'back', name: 'foqs. klasika', price: 0 }, { id: 'back_night', kind: 'back', name: 'Modra noč', price: 300 },
+  { id: 'back_wine', kind: 'back', name: 'Rdeči žamet', price: 300 }, { id: 'back_gold', kind: 'back', name: 'Zlati hrbet', price: 400 },
+  { id: 'face_classic', kind: 'face', name: 'Klasične karte', price: 0 }, { id: 'face_big', kind: 'face', name: 'Velike številke', price: 500, note: 'Ogromne številke, lažje berljivo.' },
+];
+const DAILY_REW = [10, 15, 20, 25, 30, 40, 80];
+function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-night', 'back-wine', 'face-big'].forEach((c) => b.remove(c)); if (!w) return; if (w.back && w.back !== 'classic') b.add('back-' + w.back); if (w.face === 'big') b.add('face-big'); }
+function setCoins(n, bump) { $('#coinN').textContent = n; $('#shopN').textContent = n; if (bump) { const c = $('#coinChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } }
+async function loadWallet() {
+  const r = await call({ action: 'wallet' }, { quiet: true }); if (!r || !r.wallet) return;
+  S.wallet = r.wallet; S.walletInfo = r; setCoins(r.wallet.coins); applyLook(r.wallet); renderDaily();
+  if (r.dailyAvail && !S.dailyShown && document.body.dataset.screen === 'lobby') { S.dailyShown = true; showDailyReward(r.nextDaily); }
+}
+function showDailyReward(nd) {
+  const s = nd.streak; $('#dStreak').innerHTML = DAILY_REW.map((n, i) => `<div class="d ${i + 1 < s ? 'done' : i + 1 === s ? 'now' : ''} ${i === 6 ? 'chest' : ''}"><small>${i === 6 ? 'Skrinjica' : 'Dan ' + (i + 1)}</small><b>${n}</b></div>`).join('');
+  $('#dClaim').innerHTML = `Poberi <span class="coin">Q</span> +${nd.amount}`; $('#dClaim').disabled = false; $('#mDaily').hidden = false;
+}
+$('#dClaim').onclick = async () => { const b = $('#dClaim'); b.disabled = true; const r = await call({ action: 'claim_daily' }, { quiet: true }); if (!r) { b.disabled = false; return toast('Ni uspelo, poskusi znova', 'bad'); }
+  const from = rectOf(b); $('#mDaily').hidden = true; S.wallet = r.wallet; S.walletInfo && (S.walletInfo.dailyAvail = false);
+  coinFly(from, $('#coinChip'), r.claim && r.claim.ok ? 6 : 0, () => setCoins(r.wallet.coins, true)); if (r.claim && r.claim.ok) toast('+' + r.claim.amount + ' cekinov, dan ' + r.claim.streak + ' zapored', 'ok'); };
+function coinFly(fromRect, toEl, n, done) {
+  if (!n || !toEl) { done && done(); return; } const to = rectOf(toEl); let left = n;
+  for (let i = 0; i < n; i++) { const e = document.createElement('div'); e.className = 'coin-fly'; e.innerHTML = '<span class="coin">Q</span>'; const x0 = fromRect.x + fromRect.w / 2 + (Math.random() - 0.5) * 60, y0 = fromRect.y + fromRect.h / 2 + (Math.random() - 0.5) * 20; e.style.left = x0 + 'px'; e.style.top = y0 + 'px'; document.body.appendChild(e);
+    e.animate([{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${(to.x + to.w / 2 - x0) * 0.5}px,${(to.y - y0) * 0.5 - 60}px) scale(1.2)`, opacity: 1, offset: 0.5 }, { transform: `translate(${to.x + 14 - x0}px,${to.y + to.h / 2 - 11 - y0}px) scale(.7)`, opacity: 0.9 }], { duration: 700, delay: i * 70, easing: EASE, fill: 'forwards' }).onfinish = () => { e.remove(); if (--left === 0) done && done(); }; }
+}
+function coinPop(n, label) {
+  const h = $('#hand'); const r = h ? rectOf(h) : { x: innerWidth / 2, y: innerHeight / 2, w: 0, h: 0 };
+  const e = document.createElement('div'); e.className = 'coin-pop'; e.innerHTML = `<span class="coin">Q</span>+${n} <small>${esc(label)}</small>`; e.style.left = r.x + r.w / 2 + 'px'; e.style.top = Math.max(80, r.y - 10) + 'px'; document.body.appendChild(e); setTimeout(() => e.remove(), 2000);
+  const g = $('#gCoinWrap'); g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump');
+}
+function renderAward(v) {
+  const a = v.me && v.me.award; const el = $('#finAw');
+  if (!a) { el.innerHTML = ''; return; }
+  el.innerHTML = a.parts.map((x) => `<div class="row"><span>${esc(x.label)}</span><b>+${x.n}</b></div>`).join('') +
+    `<div class="row tot"><span>Dobil si</span><b><span class="coin">Q</span>+${a.credited}</b></div>` +
+    (a.limited ? '<p class="nt">Danes si že odigral 3 igre samo z boti, zato za to igro ni cekinov. Igre s prijatelji štejejo vedno.</p>' : a.solo ? '<p class="nt">Igra samo z boti: polovica cekinov (največ 3 take igre na dan).</p>' : '');
+}
+async function renderDaily() {
+  const el = $('#daily'); const info = S.walletInfo; if (!el || !info) return;
+  const dr = info.dailyResult; const day = info.today;
+  let top = [];
+  if (MOCK) top = [{ name: 'Jaka', score: 85, user_id: 'b1' }, { name: 'Maja', score: 40, user_id: 'b3' }].concat(dr && dr.score != null ? [{ name: 'Gašper', score: dr.score, user_id: 'me' }] : []).sort((a, b) => b.score - a.score);
+  else { const { data } = await sb.from('romi_daily_results').select('name,score,user_id').eq('day', day).not('score', 'is', null).order('score', { ascending: false }).limit(5); top = data || []; }
+  const board = top.length ? '<div class="dl">' + top.map((t, i) => `<div class="${t.user_id === S.user.id ? 'you' : ''}"><em>${i + 1}.</em>${esc(t.name)} <b>${t.score}</b></div>`).join('') + '</div>' : '';
+  const dd = new Date(day + 'T12:00:00'); const dname = dd.toLocaleDateString('sl-SI', { weekday: 'long', day: 'numeric', month: 'numeric' });
+  if (!dr) el.innerHTML = `<div><span class="mono">Dnevni izziv · ${dname}</span><h3><i>◆</i>Ista razdelitev kart za vse</h3><p>Ena runda proti dvema botoma. Primerjaj rezultat s prijatelji.</p><div class="rw"><span>+20 odigran</span><span>+30 premagaš bote</span><span>+25 najboljši dneva</span></div></div><button class="btn pri" id="bDaily">Igraj izziv</button>${board}`;
+  else if (dr.score == null) el.innerHTML = `<div><span class="mono">Dnevni izziv · ${dname}</span><h3><i>◆</i>Izziv ni dokončan</h3><p>Danes si izziv že začel. Nov bo jutri.</p></div><span></span>${board}`;
+  else el.innerHTML = `<div><span class="mono">Dnevni izziv · ${dname}</span><h3><i>◆</i>Tvoj rezultat: ${dr.score} točk</h3><p>${top.length > 1 ? 'Lestvica dneva. Najboljši ob koncu dneva dobi +25 cekinov.' : 'Zaenkrat si edini. Najboljši ob koncu dneva dobi +25 cekinov.'}</p></div><span></span>${board}`;
+  const b = $('#bDaily'); if (b) b.onclick = startDaily;
+}
+async function startDaily() {
+  const r = await call({ action: 'daily_start' }); if (!r || !r.room) return;
+  unsubscribeRoom(); S.room = r.room; S.players = []; if (!MOCK) subscribeRoom(r.room.id, () => refreshRoom()); startGame();
+}
+$('#coinChip').onclick = () => openShop();
+$('#shopX').onclick = () => ($('#mShop').hidden = true);
+$('#mShop').addEventListener('click', (e) => { if (e.target.id === 'mShop') $('#mShop').hidden = true; });
+function openShop() { renderShop(); $('#mShop').hidden = false; }
+function renderShop() {
+  const w = S.wallet || { coins: 0, owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic' }; setCoins(w.coins);
+  $('#shopList').innerHTML = SHOP.map((it) => { const own = w.owned.includes(it.id); const eq = w[it.kind] === it.id.split('_')[1];
+    const pv = it.kind === 'back' ? `<div class="card back pvc ${it.id === 'back_classic' ? '' : 'v-' + it.id.split('_')[1]}"><i class="q"></i></div>` : `<div class="${it.id === 'face_big' ? 'fbig' : 'fcl'}">${cardEl('7♥').outerHTML}</div>`;
+    const btn = eq ? '<button class="btn" disabled>Izbrano ✓</button>' : own ? `<button class="btn" data-eq="${it.id}">Izberi</button>` : w.coins >= it.price ? `<button class="btn pri" data-buy="${it.id}">Kupi</button>` : `<button class="btn" disabled>Manjka ${it.price - w.coins}</button>`;
+    return `<div class="si ${eq ? 'eq' : ''}"><div class="pv">${pv}</div><b>${esc(it.name)}</b>${it.price && !own ? `<span class="pr"><span class="coin">Q</span>${it.price}</span>` : `<span class="pr" style="color:var(--pos)">${own ? 'v lasti' : ''}</span>`}${btn}</div>`; }).join('');
+  $$('#shopList [data-buy]').forEach((b) => (b.onclick = async () => { const it = SHOP.find((x) => x.id === b.dataset.buy); if (!confirm('Kupiš "' + it.name + '" za ' + it.price + ' cekinov?')) return; const r = await call({ action: 'buy', item: it.id }); if (!r) return; const r2 = await call({ action: 'equip', item: it.id }); S.wallet = (r2 || r).wallet; applyLook(S.wallet); renderShop(); toast('Kupljeno in izbrano: ' + it.name, 'ok'); }));
+  $$('#shopList [data-eq]').forEach((b) => (b.onclick = async () => { const r = await call({ action: 'equip', item: b.dataset.eq }); if (!r) return; S.wallet = r.wallet; applyLook(S.wallet); renderShop(); }));
+}
 
 /* ================= lestvica ================= */
 async function loadLeaderboard() {
