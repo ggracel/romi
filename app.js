@@ -259,7 +259,9 @@ function tickTimer() {
   if (left <= 0 && !v.paused && !S.busy && !S.ticked) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 2000)); }
 }
 function selCards() { return S.order.map((id) => parse(id)); }
-function toggleSel(id) { if (S.sel.has(id)) { S.sel.delete(id); S.order = S.order.filter((x) => x !== id); } else { S.sel.add(id); S.order.push(id); } render(); }
+function needDraw() { const v = S.view; return !!v && v.status === 'playing' && v.phase === 'draw' && v.turn === v.me.seat && !v.paused; }
+function nudgeDraw() { toast('Najprej povleci karto: s kupa ali z odloženih', 'bad'); $$('#pDeck, #pDis').forEach((e) => { e.classList.remove('nudge'); void e.offsetWidth; e.classList.add('nudge'); }); }
+function toggleSel(id) { if (needDraw()) return nudgeDraw(); if (S.sel.has(id)) { S.sel.delete(id); S.order = S.order.filter((x) => x !== id); } else { S.sel.add(id); S.order.push(id); } render(); }
 function meldObj(m) { return { cards: m.cards.map((x) => ({ c: parse(x.c), by: x.by, as: x.as })) }; }
 
 function render(prev) {
@@ -271,7 +273,7 @@ function render(prev) {
   $('#deckN').textContent = v.deckCount + ' kart'; $('#disN').textContent = v.discardCount + ' kart';
   const ds = $('#disStack'); ds.innerHTML = ''; for (let k = 0; k < Math.min(2, v.discardCount - 1); k++) { const b = document.createElement('div'); b.className = 'card blank'; ds.appendChild(b); } v.discard.forEach((c) => ds.appendChild(cardEl(c)));
   $('#bAll').hidden = !(myTurn && v.phase === 'draw' && v.discardCount > 1); $('#bAllN').textContent = v.discardCount;
-  const hot = myTurn && v.phase === 'draw'; $('#pDeck').classList.toggle('hot', hot); $('#pDis').classList.toggle('hot', hot);
+  const hot = myTurn && v.phase === 'draw'; $('#pDeck').classList.toggle('hot', hot); $('#pDis').classList.toggle('hot', hot); document.body.classList.toggle('need-draw', hot && !v.paused);
   const map = seatMap();
   $$('.zone').forEach((z) => { const seat = map[z.dataset.z]; if (seat === undefined) { z.hidden = true; return; } z.hidden = false; const p = v.players[seat];
     z.classList.toggle('turn', v.turn === seat && v.phase !== 'roundEnd');
@@ -301,6 +303,7 @@ function render(prev) {
   const pv = $('#prev');
   if (cs.length >= 2) { const arr = arrange(cs, val3); pv.className = 'prev on ' + (val3 ? '' : 'bad');
     pv.innerHTML = val3 ? `<span class="lab">${val3.label}</span>` + arr.map((x) => x.as ? `<span class="pc j">2 = ${x.as.r}${x.as.s !== '?' ? x.as.s : ''}</span>` : `<span class="pc ${red(x.c.s) ? 'red' : ''}">${x.c.r}${x.c.s}</span>`).join('') : `<span class="lab">Ni veljavno</span>` + cs.map((c) => `<span class="pc ${red(c.s) ? 'red' : ''}">${c.r}${c.s}</span>`).join(''); }
+  else if (myTurn && v.phase === 'draw') { pv.className = 'prev on draw'; pv.innerHTML = '<span class="lab">Najprej povleci</span><span class="dh">Tapni kup ali odložene karte ↑</span>'; }
   else pv.className = 'prev';
   const keep = v.turnsInRound < v.playersCount ? 2 : 1;
   const canLay = myTurn && v.phase === 'play' && val3 && v.me.hand.length - cs.length >= keep;
@@ -317,8 +320,8 @@ function render(prev) {
   // mini dnevnik
   $('#miniLog').innerHTML = v.log.slice(-4).map((l) => `<div>${esc(l.m)}</div>`).join('');
   // obvestila ob spremembi poteze / runde
-  if (prev && prev.turn !== v.turn && myTurn) banner('Ti si na potezi');
-  if (v.round >= 1 && v.phase !== 'roundEnd' && S.dealtRound !== v.round) { S.dealtRound = v.round; S.handOrder = sortHand(v.me.hand.map(parse), S.sort).map((c) => c.id); render(); setTimeout(() => dealAnim(), 250); return; }
+  if (prev && prev.turn !== v.turn && myTurn) banner(v.phase === 'draw' ? 'Na potezi si · najprej povleci' : 'Ti si na potezi');
+  if (v.round >= 1 && v.phase !== 'roundEnd' && S.dealtRound !== v.round) { S.dealtRound = v.round; if (myTurn && v.phase === 'draw') setTimeout(() => banner('Ti začneš · najprej povleci'), 1400); S.handOrder = sortHand(v.me.hand.map(parse), S.sort).map((c) => c.id); render(); setTimeout(() => dealAnim(), 250); return; }
   if (prev && prev.log.length && v.log.length && v.log[v.log.length - 1].m !== prev.log[prev.log.length - 1].m) { const last = v.log[v.log.length - 1].m; if (!last.startsWith(myName())) toast(last); }
 }
 function banner(t) { const b = document.createElement('div'); b.className = 'turn-banner'; b.textContent = t; document.body.appendChild(b); setTimeout(() => b.remove(), 1700); }
@@ -415,7 +418,7 @@ function dealAnim() {
 (function () { let drag = null;
   document.addEventListener('pointerdown', (e) => { const c = e.target.closest('#hand .card'); if (!c || e.button !== 0) return; drag = { id: c.dataset.id, x: e.clientX, y: e.clientY, ghost: null, moved: false }; });
   document.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (!drag.moved) { if (Math.hypot(dx, dy) < 8) return; drag.moved = true; S.sel.clear(); S.order = []; toggleSel(drag.id);
+    if (!drag.moved) { if (Math.hypot(dx, dy) < 8) return; drag.moved = true; S.sel.clear(); S.order = []; if (!needDraw()) toggleSel(drag.id); else render();
       const el = $(`#hand .card[data-id="${CSS.escape(drag.id)}"]`); const r = el.getBoundingClientRect(); drag.ox = e.clientX - r.left; drag.oy = e.clientY - r.top; drag.ghost = el.cloneNode(true); drag.ghost.classList.add('ghost', 'drag'); drag.ghost.classList.remove('sel'); drag.ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:90;pointer-events:none;transform:rotate(-4deg) scale(1.05)`; document.body.appendChild(drag.ghost); el.style.visibility = 'hidden'; document.body.classList.add('dragging'); }
     drag.ghost.style.left = (e.clientX - drag.ox) + 'px'; drag.ghost.style.top = (e.clientY - drag.oy) + 'px';
     $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const t = document.elementFromPoint(e.clientX, e.clientY); const tgt = t && (t.closest('.pad') || t.closest('.meld.can') || t.closest('#pDis') || (t.closest('#hand .card') && t.closest('#hand .card').dataset.id !== drag.id ? t.closest('#hand .card') : null)); if (tgt) tgt.classList.add('drop-over'); });

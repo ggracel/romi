@@ -561,3 +561,14 @@ body.mob.tab{--mw:44px}
 .mob.land .zone,.mob .zone{grid-column:auto;grid-row:auto}
 .mob.tab .zh .nm{font-size:14.5px}.mob.tab .zh .nm small{font-size:11px}.mob.tab .zh .av{width:32px;height:32px;font-size:12px}
 .mob .top{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(12,10,11,.94)}.mob.land .top{background:none}.mob.menu-open .top{z-index:64}
+
+/* najprej povleci: v fazi vlečenja je roka zatemnjena, kup in odložene izstopajo */
+.need-draw #hand .card{filter:brightness(.62) saturate(.6)}
+.need-draw .pile.hot .stack{animation:drawBob 1.3s ease-in-out infinite}
+.need-draw .pile.hot .stack::after{border-width:3px;box-shadow:0 0 0 6px rgba(70,190,197,.16)}
+#pDis.hot .stack{animation-delay:.15s}
+@keyframes drawBob{50%{transform:translateY(-6px)}}
+.pile.nudge .stack{animation:nudge .5s ease-in-out!important}
+@keyframes nudge{20%{transform:translateX(-7px) rotate(-3deg)}40%{transform:translateX(7px) rotate(3deg)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
+.prev.draw{border-color:var(--teal);background:rgba(20,17,18,.96);box-shadow:0 0 0 3px var(--teal-dim)}
+.prev.draw .dh{font-size:12.5px;color:var(--fg)}
