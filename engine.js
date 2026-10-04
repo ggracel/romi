@@ -109,18 +109,32 @@ export function computeAwards(g) {
 }
 /* ================= kampanja ================= */
 export const CAMPAIGN = {
-  chapter: 'Gostilna pri Joži',
+  // poglavja: zgoraj kraj, spodaj gostilna; šef poglavja ob prvi zmagi odklene svoj hrbet kart
+  chapters: [
+    { n: 1, place: 'Ambrus', venue: 'Gostilna pri Markcu', from: 1, to: 10 },
+    { n: 2, place: 'Zagradec', venue: 'Gostilna pri Joži', from: 11, to: 20 },
+  ],
   levels: [
-    { n: 1, title: 'Prvi obisk', bots: [['Micka', 1]], goal: 150, coins: 25 },
-    { n: 2, title: 'Kavica s Francijem', bots: [['Franci', 1]], goal: 150, coins: 30 },
-    { n: 3, title: 'Babice na obisku', bots: [['Micka', 1], ['Pepca', 1]], goal: 150, coins: 35 },
-    { n: 4, title: 'Upokojeni učitelj', bots: [['Učitelj Rudi', 2]], goal: 150, coins: 40 },
-    { n: 5, title: 'Kvartopirca', bots: [['Rudi', 2], ['Stanka', 2]], goal: 150, coins: 45 },
-    { n: 6, title: 'Nedeljska partija', bots: [['Stanka', 2], ['Tone', 2]], goal: 150, coins: 50 },
-    { n: 7, title: 'Stari maček', bots: [['Maček Ivo', 3]], goal: 150, coins: 55 },
-    { n: 8, title: 'Gostilniška mojstra', bots: [['Ivo', 3], ['Vida', 3]], goal: 150, coins: 60 },
-    { n: 9, title: 'Polna miza', bots: [['Ivo', 3], ['Vida', 3], ['Tone', 2]], goal: 150, coins: 70 },
-    { n: 10, title: 'Šef: Joža', bots: [['Joža', 4], ['Ivo', 3]], goal: 200, coins: 150, boss: true, unlock: 'back_joza' },
+    { n: 1, ch: 1, title: 'Prvi obisk', bots: [['Micka', 1]], goal: 150, coins: 25 },
+    { n: 2, ch: 1, title: 'Kavica s Francijem', bots: [['Franci', 1]], goal: 150, coins: 30 },
+    { n: 3, ch: 1, title: 'Babice na obisku', bots: [['Micka', 1], ['Pepca', 1]], goal: 150, coins: 35 },
+    { n: 4, ch: 1, title: 'Upokojeni učitelj', bots: [['Učitelj Rudi', 2]], goal: 150, coins: 40 },
+    { n: 5, ch: 1, title: 'Kvartopirca', bots: [['Rudi', 2], ['Stanka', 2]], goal: 150, coins: 45 },
+    { n: 6, ch: 1, title: 'Nedeljska partija', bots: [['Stanka', 2], ['Tone', 2]], goal: 150, coins: 50 },
+    { n: 7, ch: 1, title: 'Stari maček', bots: [['Maček Ivo', 3]], goal: 150, coins: 55 },
+    { n: 8, ch: 1, title: 'Gostilniška mojstra', bots: [['Ivo', 3], ['Vida', 3]], goal: 150, coins: 60 },
+    { n: 9, ch: 1, title: 'Polna miza', bots: [['Ivo', 3], ['Vida', 3], ['Tone', 2]], goal: 150, coins: 70 },
+    { n: 10, ch: 1, title: 'Šef: Markec', bots: [['Markec', 4], ['Ivo', 3]], goal: 200, coins: 150, boss: 'šef', unlock: 'back_markec' },
+    { n: 11, ch: 2, title: 'Prvi krog v Zagradcu', bots: [['Slavko', 2], ['Ančka', 2]], goal: 150, coins: 50 },
+    { n: 12, ch: 2, title: 'Ribič s Krke', bots: [['Ribič Tine', 3]], goal: 150, coins: 55 },
+    { n: 13, ch: 2, title: 'Kvartopirca ob reki', bots: [['Tine', 3], ['Slavko', 2]], goal: 150, coins: 60 },
+    { n: 14, ch: 2, title: 'Gasilska veselica', bots: [['Gasilec Jure', 3], ['Ančka', 2]], goal: 150, coins: 65 },
+    { n: 15, ch: 2, title: 'Stara garda', bots: [['Polde', 3], ['Minka', 3]], goal: 150, coins: 70 },
+    { n: 16, ch: 2, title: 'Nedeljsko kosilo', bots: [['Polde', 3], ['Minka', 3], ['Jure', 3]], goal: 150, coins: 75 },
+    { n: 17, ch: 2, title: 'Lisjak Lojze', bots: [['Lisjak Lojze', 4]], goal: 150, coins: 80 },
+    { n: 18, ch: 2, title: 'Dvojni zalogaj', bots: [['Lojze', 4], ['Minka', 3]], goal: 150, coins: 85 },
+    { n: 19, ch: 2, title: 'Polna gostilna', bots: [['Lojze', 4], ['Polde', 3], ['Tine', 3]], goal: 150, coins: 90 },
+    { n: 20, ch: 2, title: 'Šefica: Joži', bots: [['Joži', 4], ['Lojze', 4]], goal: 200, coins: 200, boss: 'šefica', unlock: 'back_jozi' },
   ],
 };
 export const BOT_LEVELS = { 1: 'začetnik', 2: 'rekreativec', 3: 'gostilniški mojster', 4: 'profesionalec' };

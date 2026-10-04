@@ -754,9 +754,24 @@ body.face-big :not(.fcl) > .card:not(.back):not(.joker) .ix.b i,.fbig .card:not(
 @keyframes starIn{from{transform:scale(.3) rotate(-30deg);opacity:0}}
 .fin-stars .nt{font-size:13px;color:#f6d98b;margin:8px 0 0}
 .fin-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-/* Jožev hrbet (nagrada šefa) */
-body.back-joza .card.back:not(.pvc),.card.back.v-joza{background:radial-gradient(120% 90% at 50% 0%,#18402f,#0b1f17 70%);box-shadow:0 0 0 1px #2d6b50,0 8px 18px rgba(0,0,0,.5)}
-body.back-joza .card.back:not(.pvc)::before,.card.back.v-joza::before{border-color:rgba(240,195,90,.65);background:repeating-linear-gradient(45deg,rgba(240,195,90,.12) 0 1px,transparent 1px calc(var(--cw) * .1)),repeating-linear-gradient(-45deg,rgba(90,216,174,.12) 0 1px,transparent 1px calc(var(--cw) * .1))}
-body.back-joza .card.back:not(.pvc)::after,.card.back.v-joza::after{border-color:rgba(240,195,90,.8);background:#0b1f17;box-shadow:0 0 0 calc(var(--cw) * .05) #0b1f17,0 0 0 calc(var(--cw) * .06) rgba(240,195,90,.5)}
-body.back-joza .card.back:not(.pvc) .q,.card.back.v-joza .q{background:#f0c35a;box-shadow:0 0 6px rgba(240,195,90,.8)}
+/* Markčev hrbet (šef Ambrus) */
+body.back-markec .card.back:not(.pvc),.card.back.v-markec{background:radial-gradient(120% 90% at 50% 0%,#18402f,#0b1f17 70%);box-shadow:0 0 0 1px #2d6b50,0 8px 18px rgba(0,0,0,.5)}
+body.back-markec .card.back:not(.pvc)::before,.card.back.v-markec::before{border-color:rgba(240,195,90,.65);background:repeating-linear-gradient(45deg,rgba(240,195,90,.12) 0 1px,transparent 1px calc(var(--cw) * .1)),repeating-linear-gradient(-45deg,rgba(90,216,174,.12) 0 1px,transparent 1px calc(var(--cw) * .1))}
+body.back-markec .card.back:not(.pvc)::after,.card.back.v-markec::after{border-color:rgba(240,195,90,.8);background:#0b1f17;box-shadow:0 0 0 calc(var(--cw) * .05) #0b1f17,0 0 0 calc(var(--cw) * .06) rgba(240,195,90,.5)}
+body.back-markec .card.back:not(.pvc) .q,.card.back.v-markec .q{background:#f0c35a;box-shadow:0 0 6px rgba(240,195,90,.8)}
 .mob .acts .hintb{flex:0 0 auto;padding:12px 9px}.mob .hintb .hl{display:none}
+/* Jožin hrbet (šefica Zagradec) */
+body.back-jozi .card.back:not(.pvc),.card.back.v-jozi{background:radial-gradient(120% 90% at 50% 0%,#5b2340,#260c1b 70%);box-shadow:0 0 0 1px #8a3a62,0 8px 18px rgba(0,0,0,.5)}
+body.back-jozi .card.back:not(.pvc)::before,.card.back.v-jozi::before{border-color:rgba(240,195,90,.65);background:radial-gradient(circle,rgba(255,190,215,.38) 1.2px,transparent 1.8px) 0 0/calc(var(--cw) * .14) calc(var(--cw) * .14),radial-gradient(circle,rgba(240,195,90,.3) 1px,transparent 1.6px) calc(var(--cw) * .07) calc(var(--cw) * .07)/calc(var(--cw) * .14) calc(var(--cw) * .14)}
+body.back-jozi .card.back:not(.pvc)::after,.card.back.v-jozi::after{border-color:rgba(240,195,90,.8);background:#260c1b;box-shadow:0 0 0 calc(var(--cw) * .05) #260c1b,0 0 0 calc(var(--cw) * .06) rgba(255,190,215,.45)}
+body.back-jozi .card.back:not(.pvc) .q,.card.back.v-jozi .q{background:#ffc2da;box-shadow:0 0 6px rgba(255,190,215,.8)}
+/* zavihki poglavij */
+.ch-tabs{position:absolute;right:14px;top:12px;z-index:3;display:flex;gap:6px}
+.ch-tabs button{display:flex;flex-direction:column;align-items:flex-start;padding:6px 11px;border-radius:12px;border:1px solid var(--line2);background:rgba(20,17,18,.85);font:700 13px var(--poppins);color:var(--fg);text-align:left;line-height:1.2}
+.ch-tabs button small{font:600 9px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.ch-tabs button em{font:600 10px var(--mono);font-style:normal;color:#f0c35a}
+.ch-tabs button.on{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-dim)}
+.ch-tabs button.lock,.ch-tabs button.soon{opacity:.5}.ch-tabs button.lock em,.ch-tabs button.soon em{color:var(--mute)}
+.mob .ch-tabs{position:static;margin:10px 12px 0;flex-wrap:wrap}.mob .ch-t{position:static;margin:8px 14px 0}.mob .ch-tabs button.soon{display:none}
+.mob .cmap{min-height:470px}
+.cmap svg{pointer-events:none}.mob .ch-tabs{position:relative}

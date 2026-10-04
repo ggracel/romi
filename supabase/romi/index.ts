@@ -30,7 +30,7 @@ async function players(roomId) {
   return data ?? [];
 }
 // trgovina: cene so samo na strežniku
-const SHOP = { back_classic: 0, face_classic: 0, back_joza: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+const SHOP = { back_classic: 0, face_classic: 0, back_markec: 0, back_jozi: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
 // dnevne naloge: vsak dan 3 (enake za vse), vsaka +15, vse tri +20
 const TASKS = {
   play1: { label: "Odigraj eno igro do konca", target: 1 }, daily: { label: "Odigraj dnevni izziv", target: 1 },

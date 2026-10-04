@@ -344,9 +344,9 @@ function render(prev) {
   $('#finNext').hidden = true; $('#finStars').innerHTML = ''; $('#finBack').textContent = v.campaign ? 'Na zemljevid' : 'Nazaj na sobe';
   if (v.status === 'finished' && v.campaign) { const a = v.me.award; const c = a && a.campaign; const lv = E.CAMPAIGN.levels[v.campaign - 1]; const w = v.players[v.winner];
     $('#finT').textContent = v.abandoned ? 'Igra se je zaprla' : c && c.won ? 'Nivo ' + v.campaign + ' premagan!' : 'Tokrat ni šlo';
-    $('#finP').textContent = v.abandoned ? 'Nisi igral, zato se je igra zaprla. Poskusi znova.' : c && c.won ? (c.stars === 3 ? 'Popolno, vse tri zvezdice. Pravi gostilniški mojster!' : 'Bravo! Za več zvezdic zmagaj z večjo razliko.') : (w ? esc(w.name) : 'Bot') + ' je bil tokrat boljši. Nič hudega, vsaka igra te nauči nekaj novega.';
-    if (c) $('#finStars').innerHTML = '<span>' + [1, 2, 3].map((i) => `<i class="${i <= c.stars ? 'on' : ''}">★</i>`).join('') + '</span>' + (c.unlock ? '<p class="nt">Odklenil si Jožev hrbet kart! Izbereš ga v trgovini.</p>' : '');
-    const nx = c && c.won && v.campaign < 10 ? v.campaign + 1 : null; $('#finNext').hidden = v.abandoned; $('#finNext').textContent = nx ? 'Naslednji nivo: ' + E.CAMPAIGN.levels[nx - 1].title : 'Poskusi znova'; $('#finNext').dataset.lv = nx || v.campaign; $('#fin').hidden = false; }
+    $('#finP').textContent = v.abandoned ? 'Nisi igral, zato se je igra zaprla. Poskusi znova.' : c && c.won ? (lv.boss && c.stars ? 'Premagal si ' + (lv.boss === 'šefica' ? 'šefico' : 'šefa') + ' ' + esc(acc(lv.bots[0][0])) + '! Celo poglavje ' + chOf(lv.n).place + ' je tvoje.' : c.stars === 3 ? 'Popolno, vse tri zvezdice. Pravi gostilniški mojster!' : 'Bravo! Za več zvezdic zmagaj z večjo razliko.') : (w ? esc(w.name) : 'Bot') + ' je bil tokrat boljši. Nič hudega, vsaka igra te nauči nekaj novega.';
+    if (c) $('#finStars').innerHTML = '<span>' + [1, 2, 3].map((i) => `<i class="${i <= c.stars ? 'on' : ''}">★</i>`).join('') + '</span>' + (c.unlock ? '<p class="nt">Odklenil si ' + (BOSS_BACK[c.unlock] || 'nov hrbet kart') + '! Izbereš ga v trgovini.</p>' : '');
+    const nx = c && c.won && v.campaign < E.CAMPAIGN.levels.length ? v.campaign + 1 : null; $('#finNext').hidden = v.abandoned; $('#finNext').textContent = nx ? 'Naslednji nivo: ' + E.CAMPAIGN.levels[nx - 1].title : 'Poskusi znova'; $('#finNext').dataset.lv = nx || v.campaign; $('#fin').hidden = false; }
   else if (v.status === 'finished' && v.daily) { const mine = v.players[v.me.seat]; const order = [...v.players].sort((a, b) => b.score - a.score); const pl = order.findIndex((p) => p.seat === v.me.seat) + 1; $('#finT').textContent = v.abandoned ? 'Izziv ni dokončan' : pl === 1 ? 'Premagal si bote!' : 'Izziv končan'; $('#finP').textContent = v.abandoned ? 'Igra se je zaprla, ker nisi igral. Nov izziv bo jutri.' : 'Tvoj rezultat: ' + mine.score + ' točk · ' + pl + '. mesto od ' + v.players.length + '. Lestvico dneva vidiš v sobah.'; $('#fin').hidden = false; }
   else if (v.status === 'finished') { const w = v.abandoned ? null : v.players[v.winner]; $('#finT').textContent = w ? (w.seat === v.me.seat ? 'Zmagal si!' : w.name + ' je zmagal') : 'Igra je končana'; $('#finP').textContent = w ? w.score + ' točk · ' + v.round + ' rund' : v.abandoned ? 'Soba se je zaprla, ker ni bilo več aktivnih igralcev.' : 'Admin je končal igro.'; $('#fin').hidden = false; }
   else $('#fin').hidden = true;
@@ -479,11 +479,12 @@ window.__S = S;
 const SHOP = [
   { id: 'back_classic', kind: 'back', name: 'foqs. klasika', price: 0 }, { id: 'back_night', kind: 'back', name: 'Modra noč', price: 300 },
   { id: 'back_wine', kind: 'back', name: 'Rdeči žamet', price: 300 }, { id: 'back_gold', kind: 'back', name: 'Zlati hrbet', price: 400 },
-  { id: 'back_joza', kind: 'back', name: 'Jožev hrbet', price: 0, locked: 'Premagaj šefa Jožo v kampanji' },
+  { id: 'back_markec', kind: 'back', name: 'Markčev hrbet', price: 0, locked: 'Premagaj šefa Markca (Ambrus)' },
+  { id: 'back_jozi', kind: 'back', name: 'Jožin hrbet', price: 0, locked: 'Premagaj šefico Joži (Zagradec)' },
   { id: 'face_classic', kind: 'face', name: 'Klasične karte', price: 0 }, { id: 'face_big', kind: 'face', name: 'Velike številke', price: 500, note: 'Ogromne številke, lažje berljivo.' },
 ];
 const DAILY_REW = [10, 15, 20, 25, 30, 40, 80];
-function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-night', 'back-wine', 'back-joza', 'face-big'].forEach((c) => b.remove(c)); if (!w) return; if (w.back && w.back !== 'classic') b.add('back-' + w.back); if (w.face === 'big') b.add('face-big'); }
+function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-night', 'back-wine', 'back-markec', 'back-jozi', 'face-big'].forEach((c) => b.remove(c)); if (!w) return; if (w.back && w.back !== 'classic') b.add('back-' + w.back); if (w.face === 'big') b.add('face-big'); }
 function setCoins(n, bump) { $('#coinN').textContent = n; $('#shopN').textContent = n; if (bump) { const c = $('#coinChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } }
 async function loadWallet() {
   const r = await call({ action: 'wallet' }, { quiet: true }); if (!r || !r.wallet) return;
@@ -542,8 +543,8 @@ async function renderToday() {
   // pozdrav
   const head = avail ? ['Ej ' + nm + ', lepo te je videt!', 'Dnevni cekini te že čakajo. Poberi jih, potem pa pokaži kartam, kdo je šef.'] : !dr ? ['Ej ' + nm + ', a greš na današnji izziv?', 'Ista mešanica kart za vse. Danes je lahko tvoj dan.'] : !allC ? ['Dobro ti gre, ' + nm + '!', 'Še malo do vseh nalog. Vsaka igra šteje.'] : ['Šef, ' + nm + '!', 'Za danes si vse opravil. Jutri pridi po novo nagrado, niz te čaka.'];
   // kampanja
-  const C = S.camp || { stars: {}, total: 0 }; const won = Object.keys(C.stars).filter((k) => C.stars[k] > 0).length; const nextLv = Math.min(10, won + 1);
-  const camp = `<div class="tc campc"><div><span class="mono">Kampanja · ${esc(E.CAMPAIGN.chapter)}</span><h3>${won >= 10 ? 'Poglavje premagano! Lovi še vse zvezdice.' : won ? 'Nivo ' + nextLv + ' te čaka: ' + esc(E.CAMPAIGN.levels[nextLv - 1].title) : 'Igraj sam proti vse pametnejšim botom'}</h3><p>${won}/10 nivojev · <b class="st">★ ${C.total}/30</b></p></div><button class="btn pri" id="bCamp">${won ? 'Nadaljuj kampanjo' : 'Začni kampanjo'}</button></div>`;
+  const C = S.camp || { stars: {}, total: 0 }; const NL = E.CAMPAIGN.levels.length; const won = E.CAMPAIGN.levels.filter((l) => (C.stars[l.n] || 0) > 0).length; const nextLv = Math.min(NL, won + 1); const nch = chOf(nextLv);
+  const camp = `<div class="tc campc"><div><span class="mono">Kampanja · Poglavje ${nch.n} - ${esc(nch.place)} · ${esc(nch.venue)}</span><h3>${won >= NL ? 'Vsa poglavja premagana! Lovi še vse zvezdice.' : won ? 'Nivo ' + nextLv + ' te čaka: ' + esc(E.CAMPAIGN.levels[nextLv - 1].title) : 'Igraj sam proti vse pametnejšim botom'}</h3><p>${won}/${NL} nivojev · <b class="st">★ ${C.total}/${NL * 3}</b></p></div><button class="btn pri" id="bCamp">${won ? 'Nadaljuj kampanjo' : 'Začni kampanjo'}</button></div>`;
   el.innerHTML = `<div class="td-hi"><div><h2>${esc(head[0])}</h2><p>${head[1]}</p></div><div class="rew"><div class="rew-h"><span class="mono">Dnevne nagrade · ${w.streak || 0} ${(w.streak || 0) === 1 ? 'dan' : (w.streak || 0) === 2 ? 'dneva' : 'dni'} zapored</span>${avail ? `<button class="btn pri" id="bClaim">Poberi +${info.nextDaily.amount}</button>` : '<span class="small-note">Danes pobrano, pridi jutri</span>'}</div><div class="rds">${cells}</div></div></div><div class="td-row">${chal}${tcard}</div>${camp}`;
   const b = $('#bDaily'); if (b) b.onclick = startDaily;
   const bc = $('#bClaim'); if (bc) bc.onclick = () => showDailyReward(info.nextDaily);
@@ -551,23 +552,31 @@ async function renderToday() {
   $$('#today [data-task]').forEach((x) => (x.onclick = async () => { x.disabled = true; const r = await call({ action: 'claim_task', key: x.dataset.task }, { quiet: true }); if (!r) { x.disabled = false; return toast('Ni uspelo, poskusi znova', 'bad'); } coinFly(rectOf(x), $('#coinChip'), r.claim.bonus ? 8 : 4, () => setCoins(r.wallet.coins, true)); toast(r.claim.bonus ? '+15 in bonus +' + r.claim.bonus + '! Vse naloge opravljene.' : '+15 cekinov, naloga opravljena', 'ok'); loadWallet(); }));
 }
 /* ================= kampanja ================= */
+const BOSS_BACK = { back_markec: 'Markčev hrbet', back_jozi: 'Jožin hrbet' };
+const ACC = { Markec: 'Markca', 'Joži': 'Joži' }; const acc = (n) => ACC[n] || n;
+const chOf = (n) => E.CAMPAIGN.chapters.find((c) => n >= c.from && n <= c.to);
+const bossOf = (ch) => E.CAMPAIGN.levels.find((l) => l.n === ch.to);
 async function loadCamp() { const r = await call({ action: 'campaign_info' }, { quiet: true }); if (r) S.camp = r; return r; }
 const NODE_POS = [[8, 84], [26, 76], [44, 84], [62, 76], [82, 70], [72, 46], [52, 50], [32, 44], [14, 26], [50, 14]];
 async function openCampaign() {
   unwake(); show('camp'); $('#campCoins b').textContent = S.wallet ? S.wallet.coins : 0;
   await loadCamp(); const C = S.camp || { stars: {} }; const won = (n) => (C.stars[n] || 0) > 0;
-  const firstOpen = E.CAMPAIGN.levels.find((l) => !won(l.n)); S.campSel = S.campSel || (firstOpen ? firstOpen.n : 10);
-  const pts = NODE_POS.map(([x, y]) => x + ',' + y).join(' ');
-  $('#campMap').innerHTML = `<div class="ch-t"><span class="mono">Poglavje 1</span><b>${esc(E.CAMPAIGN.chapter)}</b></div><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="rgba(70,190,197,.35)" stroke-width="1" stroke-dasharray="1 2.4" vector-effect="non-scaling-stroke" stroke-linecap="round" style="stroke-width:3px"/></svg>` +
-    E.CAMPAIGN.levels.map((l, i) => { const st = C.stars[l.n] || 0; const open = l.n === 1 || won(l.n - 1); const cls = st ? 'done' : open ? 'now' : 'lock';
-      return `<button class="node ${cls} ${l.boss ? 'boss' : ''} ${S.campSel === l.n ? 'sel' : ''}" data-lv="${l.n}" style="left:${NODE_POS[i][0]}%;top:${NODE_POS[i][1]}%"><b>${l.boss ? '♛' : l.n}</b><span class="st">${st ? '★'.repeat(st) + '☆'.repeat(3 - st) : open ? (l.boss ? 'šef' : 'na vrsti') : ''}</span></button>`; }).join('');
+  const firstOpen = E.CAMPAIGN.levels.find((l) => !won(l.n)); S.campSel = S.campSel || (firstOpen ? firstOpen.n : E.CAMPAIGN.levels.length);
+  const mobMap = document.body.classList.contains('mob'); const NP = NODE_POS.map(([x, y]) => [x, mobMap ? 26 + y * 0.72 : y]); const pts = NP.map(([x, y]) => x + ',' + y).join(' '); const ch = chOf(S.campSel); const lvls = E.CAMPAIGN.levels.filter((l) => l.ch === ch.n);
+  $('#campSub').textContent = 'Kampanja · Poglavje ' + ch.n + ' - ' + ch.place;
+  const tabs = '<div class="ch-tabs">' + E.CAMPAIGN.chapters.map((c) => { const open = c.from === 1 || won(c.from - 1); const n = E.CAMPAIGN.levels.filter((l) => l.ch === c.n && won(l.n)).length; return `<button class="${c.n === ch.n ? 'on' : ''} ${open ? '' : 'lock'}" data-ch="${c.n}" ${open ? '' : 'title="Najprej premagaj šefa prejšnjega poglavja"'}><small>Poglavje ${c.n}</small>${esc(c.place)}<em>${open ? n + '/10' : 'zaklenjeno'}</em></button>`; }).join('') + '<button class="soon" disabled><small>Poglavje ' + (E.CAMPAIGN.chapters.length + 1) + '</small>Kmalu …<em>nova postaja</em></button></div>';
+  $('#campMap').innerHTML = `${tabs}<div class="ch-t"><span class="mono">Poglavje ${ch.n} - ${esc(ch.place)}</span><b>${esc(ch.venue)}</b></div><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="rgba(70,190,197,.35)" stroke-width="1" stroke-dasharray="1 2.4" vector-effect="non-scaling-stroke" stroke-linecap="round" style="stroke-width:3px"/></svg>` +
+    lvls.map((l, i) => { const st = C.stars[l.n] || 0; const open = l.n === 1 || won(l.n - 1); const cls = st ? 'done' : open ? 'now' : 'lock';
+      return `<button class="node ${cls} ${l.boss ? 'boss' : ''} ${S.campSel === l.n ? 'sel' : ''}" data-lv="${l.n}" style="left:${NP[i][0]}%;top:${NP[i][1]}%"><b>${l.boss ? '♛' : l.n}</b><span class="st">${st ? '★'.repeat(st) + '☆'.repeat(3 - st) : l.boss ? l.boss + ' ' + esc(l.bots[0][0]) : open ? 'na vrsti' : ''}</span></button>`; }).join('');
   $$('#campMap .node').forEach((n) => (n.onclick = () => { S.campSel = +n.dataset.lv; openCampaign(); }));
+  $$('#campMap .ch-tabs [data-ch]').forEach((b) => (b.onclick = () => { if (b.classList.contains('lock')) return toast('Najprej premagaj šefa prejšnjega poglavja'); const c = E.CAMPAIGN.chapters[+b.dataset.ch - 1]; const fo = E.CAMPAIGN.levels.find((l) => l.ch === c.n && !won(l.n)); S.campSel = fo ? fo.n : c.from; openCampaign(); }));
   const l = E.CAMPAIGN.levels[S.campSel - 1]; const st = C.stars[l.n] || 0; const open = l.n === 1 || won(l.n - 1);
-  $('#campLvl').innerHTML = `<span class="mono">Nivo ${l.n}${l.boss ? ' · šef poglavja' : ''}</span><h3>${esc(l.title)}</h3>
+  const bb = l.unlock ? l.unlock.split('_')[1] : '';
+  $('#campLvl').innerHTML = `<span class="mono">Nivo ${l.n}${l.boss ? ' · ' + l.boss + ' poglavja' : ''} · ${esc(ch.venue)}</span><h3>${esc(l.title)}</h3>
     <div class="cbots">${l.bots.map(([nm, lv], i) => `<div class="cb"><span class="av" style="background:${COLORS[i + 1]};color:#0d2c2e">${ini(nm)}</span><div><b>${esc(nm)}</b><small>${E.BOT_LEVELS[lv]} · ${'●'.repeat(lv)}${'○'.repeat(4 - lv)}</small></div></div>`).join('')}</div>
-    <div class="crows"><div><span>Igra do</span><b>${l.goal} točk</b></div><div><span>Nagrada prvič</span><b><span class="coin">Q</span>${l.coins}</b></div><div><span>Vsaka nova zvezdica</span><b><span class="coin">Q</span>10</b></div>${l.unlock ? '<div><span>Odklene</span><b>Jožev hrbet kart</b></div>' : ''}</div>
+    <div class="crows"><div><span>Igra do</span><b>${l.goal} točk</b></div><div><span>Nagrada prvič</span><b><span class="coin">Q</span>${l.coins}</b></div><div><span>Vsaka nova zvezdica</span><b><span class="coin">Q</span>10</b></div>${l.unlock ? '<div><span>Odklene</span><b>' + BOSS_BACK[l.unlock] + '</b></div>' : ''}</div>
     <div class="cstars"><div class="${st >= 1 ? 'on' : ''}"><b>★</b>zmagaš</div><div class="${st >= 2 ? 'on' : ''}"><b>★★</b>zmagaš za 50+ točk</div><div class="${st >= 3 ? 'on' : ''}"><b>★★★</b>zmagaš za 100+ točk</div></div>
-    ${l.unlock ? '<div class="cunl"><div class="card back v-joza pvc"><i class="q"></i></div><span>Premagaj Jožo in dobiš njegov hrbet kart, ki ga v trgovini ni.</span></div>' : ''}
+    ${l.unlock ? `<div class="cunl"><div class="card back v-${bb} pvc"><i class="q"></i></div><span>Premagaj ${l.boss === 'šefica' ? 'šefico' : 'šefa'} ${esc(acc(l.bots[0][0]))} in dobiš ${BOSS_BACK[l.unlock]} kart, ki ga v trgovini ni.</span></div>` : ''}
     <label class="cnt-t"><input type="checkbox" id="campNoTimer" ${S.campNoTimer ? 'checked' : ''}> Igraj brez štoparice (v svojem ritmu)</label>
     <button class="btn pri big" id="campPlay" ${open ? '' : 'disabled'}>${open ? (st ? 'Igraj znova' : 'Igraj nivo ' + l.n) : 'Najprej premagaj nivo ' + (l.n - 1)}</button>
     <p class="small-note">Namig v igri stane 20 cekinov in pokaže možno kombinacijo.</p>`;
