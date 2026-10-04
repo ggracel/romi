@@ -4,6 +4,7 @@ export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q
 export const parse = (id) => ({ r: id.slice(0, -1), s: id.slice(-1), id });
 export const RV = (c) => RANKS.indexOf(typeof c === 'string' ? c : c.r) + 1;
 export const isJ = (c) => (typeof c === 'string' ? c : c.r).startsWith('2');
+export const RVH = (c) => (RV(c) === 1 ? 14 : RV(c)); // as je vedno najvišji
 export const val = (c) => { if (isJ(c)) return 25; const v = RV(c); if (v === 1) return 15; if (v >= 11) return 10; return 5; };
 
 export function newDeck(rng = Math.random) {
@@ -19,9 +20,9 @@ export function validate(cards) {
   if (!nat.length) return { type: 'set', label: 'Set jokerjev', mode: 'jokers' };
   if (nat.every((c) => c.r === nat[0].r) && new Set(nat.map((c) => c.s)).size === nat.length && cards.length <= 4) return { type: 'set', label: 'Set ' + nat[0].r, mode: 'set' };
   if (nat.every((c) => c.s === nat[0].s) && new Set(nat.map((c) => c.r)).size === nat.length) {
+    // as je samo zgoraj (Q-K-A), niz gre od mesta 2 (joker) do asa, največ 13 kart
     const tryRun = (vals) => { vals.sort((a, b) => a - b); const span = vals[vals.length - 1] - vals[0] + 1; const need = span - vals.length; return need <= jok.length && span + (jok.length - need) <= 13; };
-    if (tryRun(nat.map(RV))) return { type: 'run', label: 'Niz ' + nat[0].s, mode: 'normal' };
-    if (tryRun(nat.map((c) => (RV(c) === 1 ? 14 : RV(c))))) return { type: 'run', label: 'Niz ' + nat[0].s, mode: 'aceHigh' };
+    if (tryRun(nat.map(RVH))) return { type: 'run', label: 'Niz ' + nat[0].s, mode: nat.some((c) => RV(c) === 1) ? 'aceHigh' : 'normal' };
   }
   return null;
 }
@@ -32,11 +33,10 @@ export function arrange(cards, v) {
   const jok = cards.filter(isJ), nat = cards.filter((c) => !isJ(c));
   if (v.type === 'set') { const rk = nat.length ? nat[0].r : '?'; return cards.map((c) => ({ c, as: isJ(c) ? { r: rk, s: '?' } : null })); }
   const suit = nat[0].s;
-  const vv = (c) => { const r = RV(c); if (v.mode === 'aceHigh') return r === 1 ? 14 : r; return r; };
+  const vv = RVH;
   const show = (x) => RANKS[(x === 14 ? 1 : x) - 1];
-  // as zgoraj (Q-K-A) je dovoljen, če v nizu ni pravega asa spodaj; čez rob (K-A-2) ne
-  const natA = nat.some((c) => RV(c) === 1);
-  const lo = v.mode === 'aceHigh' ? 2 : 1, hi = v.mode === 'aceHigh' || !natA ? 14 : 13;
+  // as je samo zgoraj: najnižje mesto je 2 (joker), najvišje as (14); čez rob (K-A-2) ne
+  const lo = 2, hi = 14;
   const slots = new Map(); nat.forEach((c) => slots.set(vv(c), { c, as: null }));
   let min = Math.min(...slots.keys()), max = Math.max(...slots.keys());
   const put = (j, x) => slots.set(x, { c: j, as: { r: show(x), s: suit } });
@@ -73,7 +73,9 @@ export function addOptions(meld, card) {
   const si = swapIndex(meld, card); if (si >= 0) return { swap: si };
   const base = meld.cards.map((x) => x.c); const bt = validate(base);
   // set: dovolj je, da je kombinacija še veljavna (največ 4 karte)
-  if (!bt || bt.type === 'set') { const test = validate([...base, card]); if (!test || test.type !== 'set') return null; return { test, lo: null, hi: null, auto: arrange([...base, card], test) }; }
+  // stari nizi z asom spodaj (A-2-3, položeni pred spremembo pravil) ostanejo nizi, da jih lahko še podaljšaš navzgor
+  const natB = base.filter((c) => !isJ(c)); const oldRun = !bt && natB.length > 1 && natB.every((c) => c.s === natB[0].s) && new Set(natB.map((c) => c.r)).size === natB.length;
+  if (!oldRun && (!bt || bt.type === 'set')) { const test = validate([...base, card]); if (!test || test.type !== 'set') return null; return { test, lo: null, hi: null, auto: arrange([...base, card], test) }; }
   // niz: obstoječe karte (in jokerji) ostanejo na svojih mestih, nova karta gre lahko samo na začetek ali konec
   if (meld.cards.length >= 13) return null;
   const suit = meld.cards.find((x) => !isJ(x.c)).c.s;
@@ -85,10 +87,10 @@ export function addOptions(meld, card) {
   const cur = meld.cards.map((x) => ({ c: x.c, as: x.as }));
   const mk = (v, side) => { const item = { c: card, as: isJ(card) ? { r: show(v), s: suit } : null }; return { arr: side === 'lo' ? [item, ...cur] : [...cur, item], as: item.as || { r: show(v), s: suit } }; };
   const loV = lo - 1, hiV = hi + 1;
-  const L = loV >= 1 && fits(loV) ? mk(loV, 'lo') : null;
+  const L = loV >= 2 && fits(loV) ? mk(loV, 'lo') : null;
   const H = hiV <= 14 && fits(hiV) ? mk(hiV, 'hi') : null;
   if (!L && !H) return null;
-  const test = { type: 'run', label: bt.label, mode: H && hiV === 14 ? 'aceHigh' : 'normal' };
+  const test = { type: 'run', label: bt ? bt.label : 'Niz ' + suit, mode: H && hiV === 14 ? 'aceHigh' : 'normal' };
   if (!isJ(card)) return { test, lo: null, hi: null, auto: (H || L).arr };
   return { test, lo: L, hi: H, auto: (H || L).arr };
 }
@@ -188,7 +190,7 @@ function useful(id, hand) {
   if (isJ(id)) return 99; const c = parse(id); let u = 0;
   for (const o of hand) { if (o === id) continue; if (isJ(o)) { u += 0.5; continue; } const q = parse(o);
     if (q.r === c.r && q.s !== c.s) u += 2;
-    else if (q.s === c.s) { const hi = (x) => (RV(x) === 1 ? 14 : RV(x)); const d = Math.min(Math.abs(RV(q) - RV(c)), Math.abs(hi(q) - hi(c))); if (d === 1) u += 2; else if (d === 2) u += 1; } }
+    else if (q.s === c.s) { const hi = (x) => (RV(x) === 1 ? 14 : RV(x)); const d = Math.abs(hi(q) - hi(c)); if (d === 1) u += 2; else if (d === 2) u += 1; } }
   return u;
 }
 function rngFrom(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -391,7 +393,7 @@ export function botStep(g, now) {
       if (lvl >= 4) {
         const fitsTable = (id) => g.melds.some((m) => addOptions(meldOf(m), parse(id)));
         const took = Object.entries(g.took || {}).filter(([st]) => +st !== seat && !g.players[+st].bot).flatMap(([, v]) => v).map(parse);
-        const helpsHuman = (id) => { const c = parse(id); return took.some((t) => t.r === c.r || (t.s === c.s && Math.abs(RV(t) - RV(c)) <= 2)); };
+        const helpsHuman = (id) => { const c = parse(id); return took.some((t) => t.r === c.r || (t.s === c.s && Math.abs(RVH(t) - RVH(c)) <= 2)); };
         const safe = pool.filter((id) => !fitsTable(id) && !helpsHuman(id)); if (safe.length) pool = safe;
       }
       pick = [...pool].sort((a, b) => useful(a, p.hand) - useful(b, p.hand) || val(parse(b)) - val(parse(a)))[0];
