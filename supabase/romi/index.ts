@@ -30,7 +30,7 @@ async function players(roomId) {
   return data ?? [];
 }
 // trgovina: cene so samo na strežniku
-const SHOP = { back_classic: 0, face_classic: 0, back_markec: 0, back_jozi: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+const SHOP = { back_classic: 0, face_classic: 0, felt_classic: 0, back_markec: 0, back_jozi: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500, felt_zelena: 250, felt_modra: 250, felt_bordo: 250, felt_kava: 250, felt_grafit: 250 };
 // dnevne naloge: vsak dan 3 (enake za vse), vsaka +15, vse tri +20
 const TASKS = {
   play1: { label: "Odigraj eno igro do konca", target: 1 }, daily: { label: "Odigraj dnevni izziv", target: 1 },
@@ -127,8 +127,9 @@ Deno.serve(async (req) => {
     }
     if (action === "equip") {
       const item = String(body.item || ""); const w = await wallet(uid);
-      if (!w.owned.includes(item)) throw ue("Tega še nimaš.");
-      const [kind, name] = item.split("_"); if (!["back", "face"].includes(kind)) throw ue("Napačen predmet.");
+      if (!(item in SHOP)) throw ue("Napačen predmet.");
+      if (!w.owned.includes(item) && !item.endsWith("_classic")) throw ue("Tega še nimaš.");
+      const [kind, name] = item.split("_"); if (!["back", "face", "felt"].includes(kind)) throw ue("Napačen predmet.");
       await admin.from("romi_wallet").update({ [kind]: name, updated_at: new Date().toISOString() }).eq("user_id", uid);
       return ok({ wallet: await wallet(uid) });
     }

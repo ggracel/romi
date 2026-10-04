@@ -63,8 +63,8 @@ if (!MOCK) {
   const botsReady = () => setTimeout(() => { const g = M.game; if (g && g.phase === 'roundEnd') { g.players.forEach((p) => { if (p.id !== 'me') p.ready = true; }); if (g.players.every((p) => p.ready)) { E.startRound(g, Date.now()); botPlay(); } notify(); } }, 2500);
   const mDay = () => new Date().toISOString().slice(0, 10);
   M.camp = { 1: 3, 2: 2, 3: 1 }; M.taskProg = { play1: 0, lay: 2, swap: 1 }; M.taskClaimed = [];
-  M.wallet = { coins: 340, streak: 2, last_daily: '', owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic' }; M.dailyResult = null;
-  const MSHOP = { back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+  M.wallet = { coins: 340, streak: 2, last_daily: '', owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic', felt: 'classic' }; M.dailyResult = null;
+  const MSHOP = { back_gold: 400, back_night: 300, back_wine: 300, face_big: 500, felt_zelena: 250, felt_modra: 250, felt_bordo: 250, felt_kava: 250, felt_grafit: 250 };
   const mockTasks = (g) => { if (!g) return; const p = g.players[0]; const ev = p.ev || {}, sent = p.evSent || {}; for (const k of Object.keys(ev)) M.taskProg[k] = (M.taskProg[k] || 0) + (ev[k] - (sent[k] || 0)); p.evSent = { ...ev }; if (g.status === 'finished' && !g.tasksDone && !g.abandoned) { g.tasksDone = true; M.taskProg.play1 = (M.taskProg.play1 || 0) + 1; } };
   const mockCamp = (g) => { if (!g || !g.campaign || g.status !== 'finished' || g.coinsDone || g.abandoned) return; g.coinsDone = true; g.awards = {}; const res = E.campaignResult(g); if (!res) return; const lv = E.CAMPAIGN.levels.find((x) => x.n === g.campaign); const prev = M.camp[g.campaign] || 0; const parts = []; if (res.won && !prev) parts.push({ label: 'Prvič premagan nivo ' + lv.n, n: lv.coins }); if (res.stars > prev) parts.push({ label: 'Nove zvezdice ×' + (res.stars - prev), n: 10 * (res.stars - prev) }); if (res.won && prev) parts.push({ label: 'Ponovna zmaga', n: 5 }); const total = parts.reduce((a, x) => a + x.n, 0); if (res.stars > prev) M.camp[g.campaign] = res.stars; M.wallet.coins += total; let unlock = null; if (res.won && !prev && lv.unlock) { M.wallet.owned.push(lv.unlock); unlock = lv.unlock; } g.awards[res.seat] = { total, parts, credited: total, place: res.won ? 0 : 1, campaign: { ...res, prev, unlock } }; };
   const mockAward = (g) => { mockTasks(g); mockCamp(g); if (g && g.status === 'finished' && !g.coinsDone && !g.abandoned && (g.finishedNaturally || g.daily)) { g.coinsDone = true; g.awards = {}; const aw = E.computeAwards(g) || {}; for (const [st, a] of Object.entries(aw)) { g.awards[st] = { ...a, credited: a.total, limited: false }; if (g.players[+st].id === 'me') { M.wallet.coins += a.total; if (g.daily) M.dailyResult = { ...M.dailyResult, score: g.rounds[0][+st], won: a.place === 0 }; } } } };
@@ -78,7 +78,7 @@ if (!MOCK) {
       M.dailyRoom = { id: 'k' + lv.n, name: 'Kampanja · ' + lv.n + '. ' + lv.title, admin: 'me', turn_time: 90, goal: lv.goal, status: 'playing', private: true }; botPlay(); return { room: M.dailyRoom, view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'claim_daily') { const w = M.wallet; if (w.last_daily === mDay()) return { claim: { ok: false }, wallet: { ...w } }; w.streak++; const amt = [10, 15, 20, 25, 30, 40, 80][w.streak - 1]; w.coins += amt; w.last_daily = mDay(); return { claim: { ok: true, amount: amt, streak: w.streak }, wallet: { ...w } }; }
     if (body.action === 'buy') { const w = M.wallet; const pr = MSHOP[body.item]; if (!pr) throw new Error('Tega v trgovini ni.'); if (w.owned.includes(body.item)) throw new Error('To že imaš.'); if (w.coins < pr) throw new Error('Premalo cekinov.'); w.coins -= pr; w.owned.push(body.item); return { wallet: { ...w } }; }
-    if (body.action === 'equip') { const w = M.wallet; if (!w.owned.includes(body.item)) throw new Error('Tega še nimaš.'); const [k, n] = body.item.split('_'); w[k] = n; return { wallet: { ...w } }; }
+    if (body.action === 'equip') { const w = M.wallet; if (!w.owned.includes(body.item) && !body.item.endsWith('_classic')) throw new Error('Tega še nimaš.'); const [k, n] = body.item.split('_'); w[k] = n; return { wallet: { ...w } }; }
     if (body.action === 'daily_start') { if (M.dailyResult) throw new Error('Današnji izziv si že odigral. Nov bo jutri.'); const ps = [{ user_id: 'me', name: 'Gašper', seat: 0 }, { user_id: 'b1', name: 'Ana', seat: 1, is_bot: true }, { user_id: 'b2', name: 'Bor', seat: 2, is_bot: true }];
       M.game = E.newGame(ps, 120, 9999); M.game.seed = E.seedOf('romi-' + mDay()); M.game.maxRounds = 1; M.game.daily = mDay(); M.game.starter = 0; M.game.players.forEach((p, i) => (p.bot = i > 0)); E.startRound(M.game, now);
       M.dailyRoom = { id: 'd1', name: 'Dnevni izziv', admin: 'me', turn_time: 120, goal: 9999, status: 'playing', private: true }; M.dailyResult = { score: null }; botPlay(); return { room: M.dailyRoom, view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
@@ -492,9 +492,14 @@ const SHOP = [
   { id: 'back_markec', kind: 'back', name: 'Markčev hrbet', price: 0, locked: 'Premagaj šefa Markca (Ambrus)' },
   { id: 'back_jozi', kind: 'back', name: 'Jožin hrbet', price: 0, locked: 'Premagaj šefico Joži (Zagradec)' },
   { id: 'face_classic', kind: 'face', name: 'Klasične karte', price: 0 }, { id: 'face_big', kind: 'face', name: 'Velike številke', price: 500, note: 'Ogromne številke, lažje berljivo.' },
+  { id: 'felt_classic', kind: 'felt', name: 'Klasična miza', price: 0 }, { id: 'felt_zelena', kind: 'felt', name: 'Zelena čoha', price: 250 },
+  { id: 'felt_modra', kind: 'felt', name: 'Polnočno modra', price: 250 }, { id: 'felt_bordo', kind: 'felt', name: 'Bordo', price: 250 },
+  { id: 'felt_kava', kind: 'felt', name: 'Kava', price: 250 }, { id: 'felt_grafit', kind: 'felt', name: 'Grafit', price: 250 },
 ];
+const SHOP_KIND = { back: 'Hrbet kart', face: 'Karte', felt: 'Miza' };
+const FELTS = ['zelena', 'modra', 'bordo', 'kava', 'grafit'];
 const DAILY_REW = [10, 15, 20, 25, 30, 40, 80];
-function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-night', 'back-wine', 'back-markec', 'back-jozi', 'face-big'].forEach((c) => b.remove(c)); if (!w) return; if (w.back && w.back !== 'classic') b.add('back-' + w.back); if (w.face === 'big') b.add('face-big'); }
+function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-night', 'back-wine', 'back-markec', 'back-jozi', 'face-big', ...FELTS.map((f) => 't-' + f)].forEach((c) => b.remove(c)); if (!w) return; if (w.back && w.back !== 'classic') b.add('back-' + w.back); if (w.face === 'big') b.add('face-big'); if (FELTS.includes(w.felt)) b.add('t-' + w.felt); }
 function setCoins(n, bump) { $('#coinN').textContent = n; $('#shopN').textContent = n; if (bump) { const c = $('#coinChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } }
 async function loadWallet() {
   const r = await call({ action: 'wallet' }, { quiet: true }); if (!r || !r.wallet) return;
@@ -613,11 +618,12 @@ $('#shopX').onclick = () => ($('#mShop').hidden = true);
 $('#mShop').addEventListener('click', (e) => { if (e.target.id === 'mShop') $('#mShop').hidden = true; });
 function openShop() { renderShop(); $('#mShop').hidden = false; }
 function renderShop() {
-  const w = S.wallet || { coins: 0, owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic' }; setCoins(w.coins);
-  $('#shopList').innerHTML = SHOP.filter((it) => !it.locked || w.owned.includes(it.id) || true).map((it) => { const own = w.owned.includes(it.id); const eq = w[it.kind] === it.id.split('_')[1];
-    const pv = it.kind === 'back' ? `<div class="card back pvc ${it.id === 'back_classic' ? '' : 'v-' + it.id.split('_')[1]}"><i class="q"></i></div>` : `<div class="${it.id === 'face_big' ? 'fbig' : 'fcl'}">${cardEl('7♥').outerHTML}</div>`;
+  const w = S.wallet || { coins: 0, owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic', felt: 'classic' }; setCoins(w.coins);
+  $('#shopList').innerHTML = SHOP.map((it, i) => { const own = w.owned.includes(it.id) || it.id.endsWith('_classic'); const eq = (w[it.kind] || 'classic') === it.id.split('_')[1];
+    const head = !i || SHOP[i - 1].kind !== it.kind ? `<h3 class="sh-k">${SHOP_KIND[it.kind]}</h3>` : '';
+    const pv = it.kind === 'felt' ? `<div class="felt-pv f-${it.id.split('_')[1]}">${cardEl('7♥').outerHTML}</div>` : it.kind === 'back' ? `<div class="card back pvc ${it.id === 'back_classic' ? '' : 'v-' + it.id.split('_')[1]}"><i class="q"></i></div>` : `<div class="${it.id === 'face_big' ? 'fbig' : 'fcl'}">${cardEl('7♥').outerHTML}</div>`;
     const btn = eq ? '<button class="btn" disabled>Izbrano ✓</button>' : own ? `<button class="btn" data-eq="${it.id}">Izberi</button>` : it.locked ? `<button class="btn" disabled>${esc(it.locked)}</button>` : w.coins >= it.price ? `<button class="btn pri" data-buy="${it.id}">Kupi</button>` : `<button class="btn" disabled>Manjka ${it.price - w.coins}</button>`;
-    return `<div class="si ${eq ? 'eq' : ''}"><div class="pv">${pv}</div><b>${esc(it.name)}</b>${it.price && !own ? `<span class="pr"><span class="coin">Q</span>${it.price}</span>` : `<span class="pr" style="color:var(--pos)">${own ? 'v lasti' : ''}</span>`}${btn}</div>`; }).join('');
+    return head + `<div class="si ${eq ? 'eq' : ''}"><div class="pv">${pv}</div><b>${esc(it.name)}</b>${it.price && !own ? `<span class="pr"><span class="coin">Q</span>${it.price}</span>` : `<span class="pr" style="color:var(--pos)">${own ? 'v lasti' : ''}</span>`}${btn}</div>`; }).join('');
   $$('#shopList [data-buy]').forEach((b) => (b.onclick = async () => { const it = SHOP.find((x) => x.id === b.dataset.buy); if (!confirm('Kupiš "' + it.name + '" za ' + it.price + ' cekinov?')) return; const r = await call({ action: 'buy', item: it.id }); if (!r) return; const r2 = await call({ action: 'equip', item: it.id }); S.wallet = (r2 || r).wallet; applyLook(S.wallet); renderShop(); toast('Kupljeno in izbrano: ' + it.name, 'ok'); }));
   $$('#shopList [data-eq]').forEach((b) => (b.onclick = async () => { const r = await call({ action: 'equip', item: b.dataset.eq }); if (!r) return; S.wallet = r.wallet; applyLook(S.wallet); renderShop(); }));
 }
