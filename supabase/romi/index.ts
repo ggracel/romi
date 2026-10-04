@@ -30,7 +30,26 @@ async function players(roomId) {
   return data ?? [];
 }
 // trgovina: cene so samo na strežniku
-const SHOP = { back_classic: 0, face_classic: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+const SHOP = { back_classic: 0, face_classic: 0, back_joza: 0, back_gold: 400, back_night: 300, back_wine: 300, face_big: 500 };
+// dnevne naloge: vsak dan 3 (enake za vse), vsaka +15, vse tri +20
+const TASKS = {
+  play1: { label: "Odigraj eno igro do konca", target: 1 }, daily: { label: "Odigraj dnevni izziv", target: 1 },
+  lay3: { label: "Položi 3 kombinacije", target: 3, ev: "lay" }, swap: { label: "Zamenjaj jokerja na mizi", target: 1, ev: "swap" },
+  run5: { label: "Položi niz s 5 kartami ali več", target: 1, ev: "run5" }, out2: { label: "Pojdi ven v 2 rundah", target: 2, ev: "out" },
+  add3: { label: "Dodaj 3 karte k tujim kombinacijam", target: 3, ev: "add" }, set4: { label: "Položi set štirih enakih", target: 1, ev: "set4" },
+};
+const TASK_REW = 15, TASK_BONUS = 20;
+function tasksFor(day) {
+  const h = E.seedOf("naloge-" + day); const easy = ["play1", "daily"][h % 2];
+  const rest = Object.keys(TASKS).filter((k) => k !== "play1" && k !== "daily"); const a = rest[(h >>> 3) % rest.length]; const r2 = rest.filter((k) => k !== a);
+  return [easy, a, r2[(h >>> 7) % r2.length]];
+}
+// napredek nalog: ključ dogodka iz igre -> ključ naloge
+async function pushTasks(g) {
+  for (const p of g.players) { if (p.bot || p.left) continue; const ev = p.ev || {}; const sent = p.evSent || {}; const inc = {};
+    for (const k of Object.keys(ev)) { const d = (ev[k] || 0) - (sent[k] || 0); if (d > 0) inc[k] = d; }
+    if (Object.keys(inc).length) { await admin.rpc("romi_tasks_inc", { p_user: p.id, p_inc: inc }); p.evSent = { ...ev }; } }
+}
 const DAILY_REW = [10, 15, 20, 25, 30, 40, 80];
 function today(d = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Ljubljana" }).format(d); }
 function yesterday() { return today(new Date(Date.now() - 864e5)); }
@@ -73,8 +92,20 @@ Deno.serve(async (req) => {
     if (action === "wallet") {
       const w = await wallet(uid); const d = today();
       const s = w.last_daily === yesterday() ? w.streak + 1 : Math.max(w.streak - 1, 0) + 1; const ns = s > 7 ? 1 : s;
-      const { data: dr } = await admin.from("romi_daily_results").select("*").eq("day", d).eq("user_id", uid).maybeSingle();
-      return ok({ wallet: w, today: d, dailyAvail: w.last_daily !== d, nextDaily: { streak: ns, amount: DAILY_REW[ns - 1] }, dailyResult: dr || null });
+      const [{ data: dr }, { data: tr }] = await Promise.all([admin.from("romi_daily_results").select("*").eq("day", d).eq("user_id", uid).maybeSingle(), admin.from("romi_tasks").select("*").eq("day", d).eq("user_id", uid).maybeSingle()]);
+      const prog = tr?.progress || {}; const claimed = tr?.claimed || [];
+      const tasks = tasksFor(d).map((k) => { const t = TASKS[k]; const key = t.ev || k; return { key: k, label: t.label, target: t.target, progress: Math.min(t.target, prog[key] || 0), claimed: claimed.includes(key), reward: TASK_REW }; });
+      return ok({ wallet: w, today: d, dailyAvail: w.last_daily !== d, nextDaily: { streak: ns, amount: DAILY_REW[ns - 1] }, dailyResult: dr || null, tasks, tasksBonus: { amount: TASK_BONUS, claimed: claimed.includes("all") } });
+    }
+    if (action === "claim_task") {
+      const d = today(); const keys = tasksFor(d); const k = String(body.key || ""); if (!keys.includes(k)) throw ue("Ta naloga danes ni na seznamu.");
+      const t = TASKS[k]; const evKey = t.ev || k;
+      // napredek se šteje po ključu dogodka; za potrditev prenesemo vrednost na ključ naloge
+      const { data: tr } = await admin.from("romi_tasks").select("progress").eq("day", d).eq("user_id", uid).maybeSingle();
+      if (((tr?.progress || {})[evKey] || 0) < t.target) throw ue("Naloga še ni opravljena.");
+      const { data, error } = await admin.rpc("romi_task_claim", { p_user: uid, p_key: evKey, p_target: t.target, p_reward: TASK_REW, p_keys: keys.map((x) => TASKS[x].ev || x), p_bonus: TASK_BONUS }); if (error) throw error;
+      if (!data.ok) throw ue(data.error);
+      return ok({ claim: data, wallet: await wallet(uid) });
     }
     if (action === "claim_daily") {
       const { data, error } = await admin.rpc("romi_claim_daily", { p_user: uid }); if (error) throw error;
@@ -108,6 +139,28 @@ Deno.serve(async (req) => {
       E.startRound(g, now);
       await saveGame(rr.id, g);
       await Promise.all([bump(rr.id, { status: "playing" }), admin.from("romi_daily_results").insert({ day: d, user_id: uid, name: displayName(user), room_id: rr.id })]);
+      return ok({ room: { ...rr, status: "playing" }, view: E.view(g, 0, now) });
+    }
+
+    if (action === "campaign_info") {
+      const [{ data: mine }, { data: top }] = await Promise.all([admin.from("romi_campaign").select("*").eq("user_id", uid).maybeSingle(), admin.from("romi_campaign").select("name,total,user_id").order("total", { ascending: false }).limit(10)]);
+      return ok({ stars: mine?.stars || {}, total: mine?.total || 0, top: top || [] });
+    }
+    if (action === "campaign_start") {
+      const lv = E.CAMPAIGN.levels.find((x) => x.n === +body.level); if (!lv) throw ue("Ni takega nivoja.");
+      const { data: mine } = await admin.from("romi_campaign").select("stars").eq("user_id", uid).maybeSingle();
+      if (lv.n > 1 && !((mine?.stars || {})[lv.n - 1] > 0)) throw ue("Najprej premagaj prejšnji nivo.");
+      const { data: busy } = await admin.from("romi_players").select("room_id, romi_rooms!inner(status)").eq("user_id", uid);
+      if ((busy || []).some((x) => x.romi_rooms?.status === "playing")) throw ue("Najprej dokončaj igro, ki jo igraš.");
+      await admin.from("romi_players").delete().eq("user_id", uid);
+      const tt = body.noTimer ? 3600 : 90;
+      const { data: rr, error } = await admin.from("romi_rooms").insert({ name: "Kampanja · " + lv.n + ". " + lv.title, admin: uid, turn_time: tt, goal: lv.goal, private: true }).select().single();
+      if (error) throw error;
+      const ps = [{ room_id: rr.id, user_id: uid, name: displayName(user), seat: 0, is_bot: false }, ...lv.bots.map(([nm], i) => ({ room_id: rr.id, user_id: crypto.randomUUID(), name: nm, seat: i + 1, is_bot: true }))];
+      await admin.from("romi_players").insert(ps);
+      const g = E.newGame(ps.map((p, i) => ({ ...p, lvl: i ? lv.bots[i - 1][1] : undefined })), tt, lv.goal); g.campaign = lv.n; g.noTimer = !!body.noTimer; g.starter = 0;
+      E.startRound(g, now);
+      await saveGame(rr.id, g); await bump(rr.id, { status: "playing" });
       return ok({ room: { ...rr, status: "playing" }, view: E.view(g, 0, now) });
     }
 
@@ -181,6 +234,14 @@ Deno.serve(async (req) => {
       await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
       return ok({ quit: true });
     }
+    if (action === "hint") {
+      if (!g.campaign && !g.daily) throw ue("Namig je na voljo samo v kampanji in dnevnem izzivu.");
+      if (g.turn !== seat || g.phase !== "play") throw ue("Namig dobiš, ko si na potezi in si že vlekel.");
+      const h = E.findHint(g, seat); if (!h) return ok({ hint: null, view: E.view(g, seat, now) });
+      const { data: paid } = await admin.rpc("romi_spend", { p_user: uid, p_amount: 20, p_reason: "hint" });
+      if (!paid) throw ue("Za namig rabiš 20 cekinov.");
+      return ok({ hint: h, view: E.view(g, seat, now) });
+    }
     if (action === "pause" || action === "resume") {
       if (r.admin !== uid) throw ue("Samo admin lahko ustavi igro.");
       if (action === "pause" && !g.paused) { g.paused = true; g.pausedAt = now; g.log.push({ t: now, m: "Admin je ustavil igro (pavza)." }); changed = true; }
@@ -194,6 +255,28 @@ Deno.serve(async (req) => {
     }
     if (changed) {
       // globalna lestvica: samo naravno zaključene igre, enkrat
+      await pushTasks(g);
+      if (g.status === "finished" && !g.tasksDone && !g.abandoned && (g.finishedNaturally || g.daily)) {
+        g.tasksDone = true;
+        await Promise.all(g.players.filter((p) => !p.bot && !p.left).map((p) => admin.rpc("romi_tasks_inc", { p_user: p.id, p_inc: g.daily ? { play1: 1, daily: 1 } : { play1: 1 } })));
+      }
+      // kampanja: zvezdice in cekini (ne šteje v globalno lestvico)
+      if (g.campaign && g.status === "finished" && !g.coinsDone && !g.abandoned) {
+        g.coinsDone = true; g.statsDone = true; g.awards = {};
+        const res = E.campaignResult(g);
+        if (res) {
+          const p = g.players[res.seat]; const lv = E.CAMPAIGN.levels.find((x) => x.n === g.campaign);
+          const { data: prev } = await admin.rpc("romi_campaign_result", { p_user: p.id, p_name: p.name, p_level: g.campaign, p_stars: res.stars });
+          const parts = [];
+          if (res.won && !prev) parts.push({ label: "Prvič premagan nivo " + lv.n, n: lv.coins });
+          if (res.stars > (prev || 0)) parts.push({ label: "Nove zvezdice ×" + (res.stars - (prev || 0)), n: 10 * (res.stars - (prev || 0)) });
+          if (res.won && prev) parts.push({ label: "Ponovna zmaga", n: 5 });
+          const total = parts.reduce((a, x) => a + x.n, 0);
+          const { data: got } = total ? await admin.rpc("romi_award", { p_user: p.id, p_amount: total, p_reason: "campaign", p_meta: { level: lv.n, stars: res.stars }, p_bot: false }) : { data: 0 };
+          let unlock = null; if (res.won && !prev && lv.unlock) { await admin.rpc("romi_grant_item", { p_user: p.id, p_item: lv.unlock }); unlock = lv.unlock; }
+          g.awards[res.seat] = { total, parts, credited: got ?? 0, place: res.won ? 0 : 1, campaign: { ...res, prev: prev || 0, unlock } };
+        }
+      }
       if (g.status === "finished" && g.finishedNaturally && !g.statsDone) {
         g.statsDone = true;
         await Promise.all(g.players.filter((p) => !p.bot).map((p) => admin.rpc("romi_add_stat", { p_user: p.id, p_name: p.name, p_points: p.score, p_win: p.seat === g.winner })));
