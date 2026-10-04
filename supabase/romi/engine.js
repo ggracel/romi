@@ -34,7 +34,9 @@ export function arrange(cards, v) {
   const suit = nat[0].s;
   const vv = (c) => { const r = RV(c); if (v.mode === 'aceHigh') return r === 1 ? 14 : r; return r; };
   const show = (x) => RANKS[(x === 14 ? 1 : x) - 1];
-  const lo = 1, hi = v.mode === 'aceHigh' ? 14 : 13;
+  // as zgoraj (Q-K-A) je dovoljen, če v nizu ni pravega asa spodaj; čez rob (K-A-2) ne
+  const natA = nat.some((c) => RV(c) === 1);
+  const lo = v.mode === 'aceHigh' ? 2 : 1, hi = v.mode === 'aceHigh' || !natA ? 14 : 13;
   const slots = new Map(); nat.forEach((c) => slots.set(vv(c), { c, as: null }));
   let min = Math.min(...slots.keys()), max = Math.max(...slots.keys());
   const put = (j, x) => slots.set(x, { c: j, as: { r: show(x), s: suit } });
