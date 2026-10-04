@@ -853,3 +853,23 @@ body.t-grafit.mob #bg::after{opacity:0}
 .felt-pv.f-kava{background:radial-gradient(75% 75% at 50% 45%,#6b4a31,#3b281a);border-color:rgba(255,255,255,.12)}
 .felt-pv.f-grafit{background:radial-gradient(75% 75% at 50% 45%,#4a4e55,#2a2c31);border-color:rgba(255,255,255,.12)}
 .mob .shop{grid-template-columns:repeat(2,minmax(0,1fr))}.mob .si .btn{padding-left:6px;padding-right:6px;font-size:12.5px}
+
+/* ================= SHRANJENA IGRA ================= */
+.rs-dl{font:600 14px var(--mono);color:var(--warn)}
+.rpl .st{font:600 11px var(--mono);letter-spacing:.04em;color:var(--pos)}
+.rpl.abs{border-style:dashed}.rpl.abs .st{color:var(--warn)}
+.rooms .room.saved{border-color:rgba(70,190,197,.55);background:linear-gradient(160deg,rgba(70,190,197,.1),rgba(26,22,23,.85) 60%)}
+.room.saved .st i{background:var(--teal);box-shadow:0 0 0 3px var(--teal-dim)}
+.room.saved .sv-sc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:10px 0 12px}
+.room.saved .sv-sc div{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:5px 4px;text-align:center;font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room.saved .sv-sc b{display:block;font:700 14px var(--mono);color:var(--fg)}
+.room.saved .dl{font:600 11.5px var(--mono);color:var(--warn)}
+/* glava igre: gumbi in podatki v eni vrstici */
+body:not(.mob) .top{gap:14px}
+body:not(.mob) .top .btn,body:not(.mob) .room-tag span{white-space:nowrap}
+body:not(.mob) .room-tag{gap:12px;min-width:0;flex:0 1 auto}
+body:not(.mob) .room-tag span:first-child{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+body:not(.mob) .scores{min-width:0;align-items:center}
+body:not(.mob) #scores{min-width:0;overflow:hidden}
+@media (max-width:1460px){body:not(.mob) #scores .chip{padding-right:8px}body:not(.mob) #scores .chip em{display:none}}
+@media (max-width:1280px){body:not(.mob) #scores{display:none!important}}

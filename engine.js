@@ -213,7 +213,7 @@ export function startRound(g, now) {
   const rr = g.seed ? rngFrom(g.seed + g.round * 7 + 1) : Math.random;
   let top = g.deck.pop(); while (isJ(top)) { g.deck.splice(Math.floor(rr() * g.deck.length), 0, top); top = g.deck.pop(); }
   g.discard = [top];
-  g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now; g.turnOpened = g.players[g.turn].opened;
+  g.turn = g.starter; g.phase = 'draw'; g.turnStarted = now; g.paused = false; g.roundStartedAt = now; skipAway(g); g.turnOpened = g.players[g.turn].opened;
   g.log.push({ t: now, m: 'Runda ' + g.round + ' se začne. Začne ' + g.players[g.turn].name + '.' });
 }
 function reshuffleIfEmpty(g) {
@@ -285,7 +285,21 @@ export function act(g, seat, a, now) {
   }
 }
 function nextTurn(g, now) {
-  g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; g.turnOpened = g.players[g.turn].opened;
+  g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null;
+  skipAway(g); g.turnOpened = g.players[g.turn].opened;
+}
+/* igralec, ki se po shranjeni igri še ni vrnil (away): njegove poteze se preskočijo, karte ostanejo nedotaknjene */
+function skipAway(g) {
+  if (!g.players.some((p) => !p.away)) return;
+  for (let k = 0; k < g.players.length && g.players[g.turn].away; k++) { g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; }
+}
+export function resumeSaved(g, presentIds, now) {
+  g.players.forEach((p) => { if (!p.bot && !p.left) p.away = !presentIds.includes(p.id); });
+  g.paused = false; g.turnStarted = now; delete g.saved;
+  if (g.phase !== 'roundEnd' && g.players[g.turn].away) { g.phase = 'draw'; g.drawnTop = null; skipAway(g); g.turnStarted = now; g.turnOpened = g.players[g.turn].opened; }
+  if (g.phase === 'roundEnd') { g.players.forEach((p) => { if (p.away) p.ready = true; }); if (g.players.every((p) => p.ready)) startRound(g, now); }
+  const away = g.players.filter((p) => p.away).map((p) => p.name);
+  g.log.push({ t: now, m: 'Igra se nadaljuje.' + (away.length ? ' Še ni prisoten: ' + away.join(', ') + '.' : '') });
 }
 export function autoMove(g, now) {
   const p = cur(g); if (!p.bot) p.idle = (p.idle || 0) + 1;
@@ -308,7 +322,7 @@ export function checkTimeout(g, now) {
 /* igralec, ki 3 poteze zapored ne odigra, velja za odsotnega; ko ni več nobenega prisotnega človeka, se igra konča (ne šteje v lestvico) */
 export function checkAbandon(g, now) {
   if (g.status !== 'playing') return false;
-  const humans = g.players.filter((p) => !p.bot && !p.left);
+  const humans = g.players.filter((p) => !p.bot && !p.left && !p.away);
   if (humans.length && humans.some((p) => (p.idle || 0) < 3)) return false;
   g.status = 'finished'; g.abandoned = true; g.log.push({ t: now, m: 'Igra je končana, ker ni več aktivnih igralcev.' });
   return true;
@@ -332,7 +346,7 @@ function endRound(g, winnerSeat, now) {
   rows.forEach((r) => { g.players[r.seat].score += r.sum; });
   g.rounds.push(rows.map((r) => r.sum));
   g.roundEnd = { round: g.round, winner: winnerSeat, rows, at: now };
-  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = !!p.bot));
+  g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = !!p.bot || !!p.away));
   g.log.push({ t: now, m: g.players[winnerSeat].name + ' je šel ven. Konec runde ' + g.round + '.' });
   const over = g.players.filter((p) => p.score >= g.goal);
   if (over.length) { const w = over.sort((a, b) => b.score - a.score)[0]; g.status = 'finished'; g.winner = w.seat; g.finishedNaturally = true; g.log.push({ t: now, m: w.name + ' je zmagal igro s ' + w.score + ' točkami!' }); }
@@ -352,7 +366,7 @@ export function view(g, seat, now) {
     paused: g.paused, now, deckCount: g.deck.length, discard: g.discard.slice(-1), discardCount: g.discard.length, drawnTop: g.drawnTop,
     melds: g.melds, rounds: g.rounds, roundEnd: g.roundEnd, roundStartedAt: g.roundStartedAt, log: g.log.slice(-12),
     turnsInRound: g.turnsInRound, playersCount: g.players.length,
-    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot, lvl: p.bot ? p.lvl || 2 : null, left: !!p.left, idle: p.idle || 0 })),
+    players: g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name, handCount: p.hand.length, opened: p.opened, score: p.score, ready: p.ready, bot: !!p.bot, lvl: p.bot ? p.lvl || 2 : null, left: !!p.left, away: !!p.away, idle: p.idle || 0 })),
     abandoned: !!g.abandoned, daily: g.daily || null, campaign: g.campaign || null, noTimer: !!g.noTimer, hint: g.hint || null,
     me: me ? { seat: me.seat, hand: me.hand, opened: me.opened, ev: me.ev || {}, coins: evCoins(me), award: (g.awards && g.awards[me.seat]) || null } : null,
   };
@@ -387,7 +401,7 @@ export function botStep(g, now) {
       if (!did) break;
     }
     const cantFinish = p.hand.length === 1 && g.turnsInRound < g.players.length;
-    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); g.turnsInRound++; g.turn = (g.turn + 1) % g.players.length; g.phase = 'draw'; g.turnStarted = now; g.drawnTop = null; g.turnOpened = g.players[g.turn].opened; return true; }
+    if (cantFinish) { g.log.push({ t: now, m: p.name + ' je preskočil potezo (prvi krog).' }); nextTurn(g, now); return true; }
     // 4) zavrzi: začetnik naključno, ostali najmanj uporabno in najdražjo; profesionalec ne podarja kart
     const nonJ = p.hand.filter((c) => !isJ(c)); let pool = nonJ.length ? nonJ : [...p.hand];
     let pick;

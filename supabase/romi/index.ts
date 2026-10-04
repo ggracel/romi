@@ -66,6 +66,9 @@ function jwtUser(token) {
     return { id: p.sub, email: p.email || "", user_metadata: p.user_metadata || {} };
   } catch (_) { return null; }
 }
+function savedSum(g) {
+  return { round: g.round, goal: g.goal, turn: g.players[g.turn]?.name, players: g.players.map((p) => ({ id: p.id, name: p.name.replace(" (avtomatsko)", ""), score: p.score, bot: !!p.bot && !p.left, away: !!p.away })) };
+}
 function ue(m) { const e = new Error(m); e.user = true; return e; }
 function displayName(user) {
   const m = user.user_metadata || {};
@@ -173,6 +176,13 @@ Deno.serve(async (req) => {
       return ok({ room: { ...rr, status: "playing" }, view: E.view(g, 0, now) });
     }
 
+    /* ---------- shranjene igre ---------- */
+    if (action === "saved_list") {
+      const { data: rs } = await admin.from("romi_rooms").select("*").in("status", ["saved", "playing"]).contains("saved_ids", [uid]).gt("saved_until", new Date().toISOString());
+      const out = [];
+      for (const r of rs || []) { const g = await loadGame(r.id); if (!g || g.status !== "playing") continue; out.push({ room: r, sum: savedSum(g) }); }
+      return ok({ saved: out });
+    }
     const roomId = body.room_id; if (!roomId) throw ue("Manjka soba.");
     const [r, gPre] = await Promise.all([room(roomId), loadGame(roomId)]);
 
@@ -189,6 +199,7 @@ Deno.serve(async (req) => {
       return ok({ room: r, players: [...ps, me] });
     }
     if (action === "leave") {
+      if (r.status === "saved") { await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", uid); await bump(roomId); return ok({}); }
       if (r.status === "waiting") {
         await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", uid);
         const ps = await players(roomId);
@@ -231,8 +242,37 @@ Deno.serve(async (req) => {
       await bump(roomId, { status: "finished" }); return ok({});
     }
 
+    if (action === "saved_info" || action === "rejoin" || action === "resume_saved") {
+      if (!(r.saved_ids || []).includes(uid)) throw ue("Nisi igralec te igre.");
+      if (!gPre || gPre.status !== "playing" || (r.saved_until && new Date(r.saved_until).getTime() < now)) throw ue("Shranjena igra je potekla.");
+      const g = gPre;
+      if (action === "rejoin") {
+        const seat = g.players.findIndex((p) => p.id === uid); if (seat < 0) throw ue("Nisi igralec te igre.");
+        const { data: busy } = await admin.from("romi_players").select("room_id, romi_rooms!inner(status)").eq("user_id", uid).neq("room_id", roomId);
+        if ((busy || []).some((x) => x.romi_rooms?.status === "playing")) throw ue("Najprej dokončaj igro, ki jo igraš.");
+        await admin.from("romi_players").delete().eq("user_id", uid).neq("room_id", roomId);
+        await admin.from("romi_players").upsert({ room_id: roomId, user_id: uid, name: g.players[seat].name, seat, is_bot: false }, { onConflict: "room_id,user_id" });
+        if (r.status === "playing" && g.players[seat].away) { g.players[seat].away = false; g.players[seat].idle = 0; g.log.push({ t: now, m: g.players[seat].name + " se je vrnil v igro." }); await saveGame(roomId, g); }
+        await bump(roomId);
+      }
+      if (action === "resume_saved") {
+        if (r.admin !== uid) throw ue("Samo admin lahko nadaljuje igro.");
+        if (r.status !== "saved") throw ue("Igra že teče.");
+        const { data: ps } = await admin.from("romi_players").select("user_id").eq("room_id", roomId).eq("is_bot", false);
+        const present = (ps || []).map((x) => x.user_id);
+        const active = g.players.filter((p) => p.bot || p.left || present.includes(p.id)).length;
+        if (active < 2) throw ue("Za nadaljevanje mora biti v sobi vsaj še en igralec.");
+        E.resumeSaved(g, present, now);
+        await saveGame(roomId, g); await bump(roomId, { status: "playing" });
+        return ok({ room: { ...r, status: "playing" }, view: E.view(g, g.players.findIndex((p) => p.id === uid), now) });
+      }
+      const { data: ps } = await admin.from("romi_players").select("user_id").eq("room_id", roomId).eq("is_bot", false);
+      return ok({ room: r, sum: savedSum(g), present: (ps || []).map((x) => x.user_id) });
+    }
+
     // akcije v igri
     const g = gPre; if (!g) throw ue("Igra še ni začeta.");
+    if (r.saved_until && new Date(r.saved_until).getTime() < now && g.status === "playing") { g.status = "finished"; g.abandoned = true; g.log.push({ t: now, m: "Čas za shranjeno igro je potekel, igra je izničena." }); await saveGame(roomId, g); await bump(roomId, { status: "finished" }); return ok({ view: E.view(g, g.players.findIndex((p) => p.id === uid), now) }); }
     const seat = g.players.findIndex((p) => p.id === uid && !p.left); if (seat < 0) throw ue("Nisi več v tej igri.");
     let changed = false;
     if (action === "quit") {
@@ -250,6 +290,22 @@ Deno.serve(async (req) => {
       const { data: paid } = await admin.rpc("romi_spend", { p_user: uid, p_amount: 20, p_reason: "hint" });
       if (!paid) throw ue("Za namig rabiš 20 cekinov.");
       return ok({ hint: h, view: E.view(g, seat, now) });
+    }
+    if (action === "save") {
+      if (r.admin !== uid) throw ue("Samo admin lahko shrani igro.");
+      if (r.private || g.daily || g.campaign) throw ue("Te igre ni mogoče shraniti.");
+      if (g.status !== "playing") throw ue("Igra je končana.");
+      const { data: other } = await admin.from("romi_rooms").select("id,name").eq("admin", uid).eq("status", "saved").neq("id", roomId);
+      if ((other || []).length && !body.confirm) return ok({ needConfirm: true, other: other[0].name });
+      for (const o of other || []) { const og = await loadGame(o.id); if (og) { og.status = "finished"; og.abandoned = true; og.log.push({ t: now, m: "Igra je bila izničena, ker je admin shranil novo." }); await saveGame(o.id, og); } await admin.from("romi_rooms").update({ status: "finished" }).eq("id", o.id); await bump(o.id); }
+      g.paused = true; g.pausedAt = now; g.saved = now; g.savedUntil = g.savedUntil || now + 24 * 3600e3;
+      g.log.push({ t: now, m: g.players[seat].name + " je shranil igro." });
+      const ids = g.players.filter((p) => !p.bot && !p.left).map((p) => p.id);
+      await saveGame(roomId, g);
+      await admin.from("romi_rooms").update({ status: "saved", saved_ids: ids, saved_until: new Date(g.savedUntil).toISOString() }).eq("id", roomId);
+      await admin.from("romi_players").delete().eq("room_id", roomId).eq("is_bot", false);
+      await bump(roomId);
+      return ok({ saved: true, until: g.savedUntil });
     }
     if (action === "pause" || action === "resume") {
       if (r.admin !== uid) throw ue("Samo admin lahko ustavi igro.");

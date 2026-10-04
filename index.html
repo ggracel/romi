@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 <script defer src="/track.js?v=2"></script>
 </head>
 <body data-screen="boot">
@@ -83,11 +83,32 @@
 </section>
 
 <!-- ============ IGRA ============ -->
+<!-- ============ NADALJEVANJE SHRANJENE IGRE ============ -->
+<section class="view lobby" data-view="resume" hidden>
+  <div class="lobby-in" style="width:min(880px,94vw)">
+    <div class="lobby-top"><h1><span class="brand-t">foqs.<b>romi</b><i>.</i></span><small>Nadaljevanje shranjene igre</small></h1><div class="topbtns"><button class="btn" id="rsBack">← Sobe</button></div></div>
+    <div class="create">
+      <div class="cset">
+        <label class="mono">Soba</label><div id="rsName" style="font:700 20px var(--poppins)"></div>
+        <label class="mono">Stanje igre</label><div id="rsSet" style="font-size:13.5px;color:var(--dim)"></div>
+        <label class="mono">Rok za konec igre</label><div id="rsDl" class="rs-dl"></div>
+        <p class="wait-note" id="rsNote"></p>
+      </div>
+      <div class="cpl">
+        <div class="cpl-h"><span class="mono">Igralci te igre</span><span class="small-note"><span class="spin"></span> v živo</span></div>
+        <div id="rsList"></div>
+        <button class="btn pri" id="rsGo" style="width:100%;justify-content:center;margin-top:14px" hidden>Nadaljuj igro</button>
+        <p class="small-note" id="rsHint" style="margin:8px 2px 0;line-height:1.45"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="view" data-view="game" hidden>
 <header class="top">
   <div class="brand-t sm">foqs.<b>romi</b><i>.</i></div>
   <div class="room-tag"><span>Soba <b id="gRoom"></b></span><span>Runda <b id="gRound"></b></span><span>Cilj <b id="gGoal">500</b></span><span class="gcoin" id="gCoinWrap" title="Cekini, zasluženi v tej igri"><span class="coin">Q</span><b id="gCoin">0</b></span></div>
-  <div class="scores"><span id="scores" style="display:flex;gap:6px"></span><button class="btn" id="bLog" style="padding:5px 12px;font-size:12.5px;border-radius:99px;margin-left:6px">Dnevnik</button><button class="btn" id="bPause" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Pavza</button><button class="btn" id="bEnd" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Končaj igro</button><button class="btn" id="bQuit" style="padding:5px 12px;font-size:12.5px;border-radius:99px">Zapusti</button></div>
+  <div class="scores"><span id="scores" style="display:flex;gap:6px"></span><button class="btn" id="bLog" style="padding:5px 12px;font-size:12.5px;border-radius:99px;margin-left:6px">Dnevnik</button><button class="btn" id="bPause" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Pavza</button><button class="btn" id="bSave" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden title="Igra počaka 24 ur">Shrani igro</button><button class="btn" id="bEnd" style="padding:5px 12px;font-size:12.5px;border-radius:99px" hidden>Končaj igro</button><button class="btn" id="bQuit" style="padding:5px 12px;font-size:12.5px;border-radius:99px">Zapusti</button></div>
   <button class="btn mnu" id="bMenu" aria-label="Meni">☰</button>
 </header>
 <div class="menu-shade" id="menuShade"></div>
@@ -141,6 +162,6 @@
 <div class="modal" id="mDaily" hidden><div class="modal-in"><span class="mono">Dnevna nagrada</span><h2>Lep pozdrav!</h2><p class="small-note">Vsak dan, ko odpreš igro, pobereš cekine. Zaporedni dnevi dajo več, 7. dan je skrinjica.</p><div class="streak" id="dStreak"></div><button class="btn pri big" id="dClaim">Poberi</button></div></div>
 <div class="modal" id="mShop" hidden><div class="modal-in wide"><div class="shop-h"><div><span class="mono">Trgovina</span><h2>Izgled kart in mize</h2></div><span class="coinchip cbig"><span class="coin">Q</span><b id="shopN">0</b></span><button class="x-close" id="shopX" aria-label="Zapri">×</button></div><p class="small-note">Cekine dobiš z igranjem: igre s prijatelji, dobre poteze, dnevna nagrada in dnevni izziv. Kupljen videz vidiš samo ti.</p><div class="shop" id="shopList"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-<script type="module" src="app.js?v=22"></script>
+<script type="module" src="app.js?v=23"></script>
 </body>
 </html>

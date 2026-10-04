@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=13';
+import * as E from './engine.js?v=14';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -84,10 +84,16 @@ if (!MOCK) {
       M.dailyRoom = { id: 'd1', name: 'Dnevni izziv', admin: 'me', turn_time: 120, goal: 9999, status: 'playing', private: true }; M.dailyResult = { score: null }; botPlay(); return { room: M.dailyRoom, view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'create') { M.rooms[0] = { ...M.rooms[0], name: body.name, turn_time: body.turn_time, status: 'waiting' }; M.game = null; notify(); return { room: M.rooms[0] }; }
     if (body.action === 'join') return { room: M.rooms[0] };
-    if (body.action === 'leave') return {};
+    if (body.action === 'leave') { if (M.rooms[0].status === 'saved') { M.players = M.players.filter((p) => p.user_id !== 'me'); notify(); } return {}; }
     if (body.action === 'kick') { M.players = M.players.filter((p) => p.user_id !== body.user_id); notify(); return {}; }
     if (body.action === 'start') { M.game = E.newGame(M.players, M.rooms[0].turn_time, 500); M.game.starter = 0; E.startRound(M.game, now); M.rooms[0].status = 'playing'; notify(); botPlay(); return { view: JSON.parse(JSON.stringify(E.view(M.game, 0, now))) }; }
     if (body.action === 'end') { M.game.status = 'finished'; M.rooms[0].status = 'finished'; notify(); return {}; }
+    const mSum = (g) => ({ round: g.round, goal: g.goal, turn: g.players[g.turn].name, players: g.players.map((p) => ({ id: p.id, name: p.name, score: p.score, bot: !!p.bot && !p.left, away: !!p.away })) });
+    if (body.action === 'save') { const g = M.game, r = M.rooms[0]; if (M.savedOther && !body.confirm) return { needConfirm: true, other: 'Stara igra' }; M.savedOther = false; g.paused = true; g.pausedAt = now; g.savedUntil = g.savedUntil || now + 864e5; r.status = 'saved'; r.saved_ids = g.players.filter((p) => !p.bot).map((p) => p.id); r.saved_until = new Date(g.savedUntil).toISOString(); M.players = M.players.filter((p) => p.is_bot); notify(); return { saved: true, until: g.savedUntil }; }
+    if (body.action === 'saved_list') { const r = M.rooms[0]; const meIn = M.players.some((p) => p.user_id === 'me'); return { saved: M.game && r.saved_ids && (r.status === 'saved' || (r.status === 'playing' && !meIn)) ? [{ room: { ...r }, sum: mSum(M.game) }] : [] }; }
+    if (body.action === 'saved_info') { return { room: { ...M.rooms[0] }, sum: mSum(M.game), present: M.players.filter((p) => !p.is_bot).map((p) => p.user_id) }; }
+    if (body.action === 'rejoin') { const g = M.game, r = M.rooms[0]; const seat = g.players.findIndex((p) => p.id === 'me'); if (!M.players.some((p) => p.user_id === 'me')) M.players.push({ room_id: r.id, user_id: 'me', name: g.players[seat].name, seat }); if (r.status === 'playing') g.players[seat].away = false; notify(); return { room: { ...r } }; }
+    if (body.action === 'resume_saved') { const g = M.game, r = M.rooms[0]; const present = M.players.filter((p) => !p.is_bot).map((p) => p.user_id); if (g.players.filter((p) => p.bot || present.includes(p.id)).length < 2) throw new Error('Za nadaljevanje mora biti v sobi vsaj še en igralec.'); E.resumeSaved(g, present, now); r.status = 'playing'; notify(); botPlay(); return { room: { ...r }, view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
     const g = M.game; if (!g) throw new Error('Igra še ni začeta.');
     if (body.action === 'quit') { E.quit(g, 0, now); M.players = M.players.filter((p) => p.user_id !== 'me'); notify(); return { quit: true }; }
     if (body.action === 'hint') { if (M.wallet.coins < 20) throw new Error('Za namig rabiš 20 cekinov.'); const h = E.findHint(g, 0); if (h) M.wallet.coins -= 20; return { hint: h, view: JSON.parse(JSON.stringify(E.view(g, 0, now))) }; }
@@ -194,12 +200,13 @@ $('#btnLogout').onclick = async () => { await auth.logout(); location.reload(); 
 
 /* ================= sobe ================= */
 async function loadRooms() {
-  if (MOCK) { const m = window.__mockRooms(); S.rooms = m.rooms.filter((r) => r.status !== 'finished'); S.allPlayers = m.players; }
+  if (MOCK) { const m = window.__mockRooms(); S.rooms = m.rooms.filter((r) => r.status === 'waiting' || r.status === 'playing'); S.allPlayers = m.players; }
   else {
     const since = new Date(Date.now() - 24 * 3600e3).toISOString();
-    const [{ data: rooms }, { data: players }] = await Promise.all([sb.from('romi_rooms').select('*').eq('private', false).neq('status', 'finished').gt('updated_at', since).order('created_at', { ascending: false }), sb.from('romi_players').select('*')]);
+    const [{ data: rooms }, { data: players }] = await Promise.all([sb.from('romi_rooms').select('*').eq('private', false).in('status', ['waiting', 'playing']).gt('updated_at', since).order('created_at', { ascending: false }), sb.from('romi_players').select('*')]);
     S.rooms = rooms || []; S.allPlayers = players || [];
   }
+  const sv = await api({ action: 'saved_list' }).catch(() => null); S.saved = (sv && sv.saved) || [];
   renderRooms();
 }
 async function enterLobby() {
@@ -217,8 +224,12 @@ function renderRooms() {
     const st = r.status === 'playing' ? '<i></i>V teku' : `<i class="w"></i>Čaka na igralce · ${ps.length}/4`;
     const btn = mine ? '<button class="btn pri join">Vrni se v sobo</button>' : r.status === 'playing' ? '<button class="btn join" disabled>Igra teče</button>' : ps.length >= 4 ? '<button class="btn join" disabled>Polna</button>' : '<button class="btn join">Pridruži se</button>';
     return `<div class="room ${mine ? 'mine' : ''}" data-id="${r.id}"><div class="st">${st}</div><h3>${esc(r.name)}</h3><div class="avs">${ps.map((p, i) => `<div class="av" style="background:${COLORS[i]};color:#0d2c2e" title="${esc(p.name)}">${ini(p.name)}</div>`).join('')}${Array.from({ length: 4 - ps.length }, () => '<div class="av empty">+</div>').join('')}</div><div class="mono">Admin: ${esc(adminName)} · ${r.turn_time} s na potezo</div>${btn}</div>`; });
-  el.innerHTML = cards.join('') + '<div class="room new" id="roomNew"><div><div class="plus">+</div><b>Nova soba</b><span style="font-size:13px">Ti si admin, ti začneš igro.</span></div></div>';
+  const left = (t) => { const ms = new Date(t).getTime() - Date.now(); if (ms <= 0) return 'rok je potekel'; const h = Math.floor(ms / 36e5), m = Math.floor((ms % 36e5) / 6e4); return 'za konec še ' + (h ? h + ' h ' : '') + m + ' min'; };
+  const saved = (S.saved || []).map(({ room: r, sum }) => { const playing = r.status === 'playing';
+    return `<div class="room saved" data-saved="${r.id}"><div class="st"><i></i>${playing ? 'Igra teče brez tebe' : 'Shranjena igra'} · runda ${sum.round}</div><h3>${esc(r.name)}</h3><div class="dl">⏱ ${left(r.saved_until)}</div><div class="sv-sc">${sum.players.map((p) => `<div>${esc(p.name)}<b>${p.score}</b></div>`).join('')}</div><button class="btn pri join">${playing ? 'Vrni se v igro' : 'Vrni se v sobo'}</button></div>`; });
+  el.innerHTML = saved.join('') + cards.join('') + '<div class="room new" id="roomNew"><div><div class="plus">+</div><b>Nova soba</b><span style="font-size:13px">Ti si admin, ti začneš igro.</span></div></div>';
   $$('#rooms .room[data-id]').forEach((c) => (c.onclick = async () => { const r = S.rooms.find((x) => x.id === c.dataset.id); if (!r) return; const mine = S.allPlayers.some((p) => p.room_id === r.id && p.user_id === uid); if (!mine && r.status !== 'waiting') return toast('Igra v tej sobi že teče'); if (!mine) { const res = await call({ action: 'join', room_id: r.id }); if (!res) return; } enterRoom(r); }));
+  $$('#rooms .room[data-saved]').forEach((c) => (c.onclick = () => rejoinSaved(c.dataset.saved)));
   $('#roomNew').onclick = () => { S.room = null; $('#crForm').hidden = false; $('#crInfo').hidden = true; $('#crName').value = ''; $('#rp').innerHTML = ''; $('#rpN').textContent = '0/4'; $('#bStart').disabled = true; $('#crSub').textContent = ''; show('create'); };
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -237,15 +248,62 @@ async function enterRoom(r) {
 }
 async function refreshRoom() {
   if (!S.room) return;
-  if (MOCK) { const m = window.__mockRooms(); if (S.room.private) return; S.room = m.rooms[0]; S.players = m.players; }
+  if (MOCK) { const m = window.__mockRooms(); if (S.room.private) return; S.room = { ...m.rooms[0] }; S.players = m.players; if (savedRoute()) return; }
   else {
     const [{ data: r }, { data: ps }] = await Promise.all([sb.from('romi_rooms').select('*').eq('id', S.room.id).maybeSingle(), sb.from('romi_players').select('*').eq('room_id', S.room.id).order('seat')]);
     if (!r) { toast('Soba je bila zaprta'); unsubscribeRoom(); S.room = null; return enterLobby(); }
     S.room = r; S.players = ps || [];
+    if (savedRoute()) return;
     if (!S.players.some((p) => p.user_id === S.user.id)) { toast('Admin te je odstranil iz sobe'); unsubscribeRoom(); S.room = null; return enterLobby(); }
   }
   renderRoom();
 }
+/* ================= shranjena igra ================= */
+// vrne true, če je zaslon preusmerila zaradi shranjene igre
+function savedRoute() {
+  const r = S.room, sc = document.body.dataset.screen;
+  if (r.status === 'saved') {
+    if (sc === 'game') { stopGame(); toast(r.admin === S.user.id ? 'Igra je shranjena. Imate 24 ur, da jo končate.' : 'Admin je shranil igro. Nadaljujete lahko iz seznama sob.', 'ok'); unsubscribeRoom(); S.room = null; enterLobby(); return true; }
+    if (sc === 'resume') { renderResume(); return true; }
+    if (sc === 'create') { unsubscribeRoom(); S.room = null; enterLobby(); return true; }
+  }
+  if (sc === 'resume') {
+    if (r.status === 'playing' && S.players.some((p) => p.user_id === S.user.id)) { startGame(); return true; }
+    if (r.status === 'finished') { toast('Shranjena igra je potekla'); unsubscribeRoom(); S.room = null; enterLobby(); return true; }
+    return true;
+  }
+  return false;
+}
+function stopGame() { clearInterval(timerIv); clearInterval(pollIv); unwake(); document.body.classList.remove('menu-open'); }
+async function rejoinSaved(id) {
+  const r = await call({ action: 'rejoin', room_id: id }); if (!r || !r.room) return loadRooms();
+  S.room = r.room; subscribeRoom(r.room.id, () => refreshRoom());
+  if (r.room.status === 'playing') return startGame();
+  show('resume'); renderResume();
+}
+async function renderResume() {
+  if (!S.room) return; const info = await api({ room_id: S.room.id, action: 'saved_info' }).catch((e) => { toast(e.message, 'bad'); return null; });
+  if (!info) { unsubscribeRoom(); S.room = null; return enterLobby(); }
+  if (info.room.status === 'playing') { S.room = info.room; return startGame(); }
+  const isAdmin = info.room.admin === S.user.id; const sum = info.sum; const pres = new Set(info.present);
+  $('#rsName').textContent = info.room.name; $('#rsSet').textContent = 'Runda ' + sum.round + ' · na potezi ' + sum.turn + ' · do ' + sum.goal + ' točk';
+  const ms = new Date(info.room.saved_until).getTime() - Date.now(); const h = Math.max(0, Math.floor(ms / 36e5)), m = Math.max(0, Math.floor((ms % 36e5) / 6e4)); $('#rsDl').textContent = h + ' h ' + m + ' min';
+  const humans = sum.players.filter((p) => !p.bot); const missing = humans.filter((p) => !pres.has(p.id));
+  $('#rsList').innerHTML = sum.players.map((p, i) => { const here = p.bot || pres.has(p.id); return `<div class="rpl ${here ? '' : 'abs'}"><div class="av" style="background:${COLORS[i]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${p.id === info.room.admin ? ' <small>admin</small>' : ''}${p.id === S.user.id ? ' <span class="small-note">(ti)</span>' : ''}<div class="small-note">${p.score} točk</div></div><span class="st">${p.bot ? 'računalnik' : here ? '✓ tukaj' : 'čakamo'}</span></div>`; }).join('');
+  $('#rsNote').textContent = isAdmin ? 'Ko so vsi v sobi, klikni Nadaljuj. Lahko začneš tudi prej, manjkajoči se pridruži kasneje.' : 'Počakaj, da admin nadaljuje igro. Stran se posodobi sama.';
+  const go = $('#rsGo'); go.hidden = !isAdmin; const active = sum.players.filter((p) => p.bot || pres.has(p.id)).length;
+  go.disabled = active < 2; go.textContent = active < 2 ? 'Počakaj vsaj enega igralca' : missing.length ? 'Nadaljuj brez: ' + missing.map((p) => p.name).join(', ') : 'Nadaljuj igro';
+  $('#rsHint').textContent = isAdmin && missing.length && active >= 2 ? 'Kdor manjka, se lahko pridruži kasneje in igra naprej s svojimi kartami. Dokler ga ni, se njegove poteze preskočijo.' : '';
+}
+$('#rsGo').onclick = async () => { const r = await call({ action: 'resume_saved' }); if (r?.room) { S.room = r.room; startGame(); } };
+$('#rsBack').onclick = async () => { await call({ action: 'leave' }); unsubscribeRoom(); S.room = null; enterLobby(); };
+$('#bSave').onclick = async () => {
+  if (!confirm('Shranim igro? Igra se ustavi za vse. Od zdaj imate 24 ur, da jo končate. Ko se vrnete v sobo, klikneš Nadaljuj in igrate naprej s kartami, ki jih ima kdo v roki. Če igra v 24 urah ni končana, se izniči.')) return;
+  let r = await call({ action: 'save' }); if (!r) return;
+  if (r.needConfirm) { if (!confirm('Že imaš shranjeno igro "' + r.other + '". Če shraniš to, bo tista izničena. Nadaljujem?')) return; r = await call({ action: 'save', confirm: true }); if (!r) return; }
+  stopGame(); toast('Igra je shranjena. Imate 24 ur, da jo končate.', 'ok'); unsubscribeRoom(); S.room = null; enterLobby();
+};
+
 function renderRoom() {
   if (!S.room) return;
   if (S.room.status === 'playing') { if (document.body.dataset.screen !== 'game') startGame(); else call({ action: 'view' }, { quiet: true }); return; }
@@ -267,7 +325,7 @@ let timerIv = null, pollIv = null;
 async function startGame() {
   show('game'); S.sel.clear(); S.order = []; S.prevTurn = null; S.prevRound = 0;
   $('#gRoom').textContent = S.room.name;
-  const isAdmin = S.room.admin === S.user.id && !S.room.private; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
+  const isAdmin = S.room.admin === S.user.id && !S.room.private; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bSave').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
   await call({ action: 'view' }, { quiet: true });
   clearInterval(timerIv); timerIv = setInterval(tickTimer, 500); wake();
   clearInterval(pollIv); pollIv = setInterval(() => { if (document.body.dataset.screen === 'game' && !S.busy) call({ action: 'view' }, { quiet: true }); }, 8000);
@@ -313,7 +371,7 @@ function render(prev) {
   const map = seatMap();
   $$('.zone').forEach((z) => { const seat = map[z.dataset.z]; if (seat === undefined) { z.hidden = true; return; } z.hidden = false; const p = v.players[seat];
     z.classList.toggle('turn', v.turn === seat && v.phase !== 'roundEnd');
-    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}${!p.bot && p.idle >= 2 ? ' · odsoten?' : ''}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 14) }, () => '<div class="card back"></div>').join('') + '<b class="fan-n">' + p.handCount + '</b>' + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
+    z.innerHTML = `<span class="tag">na potezi</span><div class="zh"><div class="av" style="background:${COLORS[seat]};color:#0d2c2e">${ini(p.name)}</div><div class="nm">${esc(p.name)}${seat === v.me.seat ? ' <span class="small-note">(ti)</span>' : ''}<small>${p.handCount} kart · ${p.score} točk${p.opened ? '' : ' · ni odprt'}${p.away ? ' · ni prisoten' : !p.bot && p.idle >= 2 ? ' · odsoten?' : ''}</small></div>${seat !== v.me.seat ? '<div class="fan">' + Array.from({ length: Math.min(p.handCount, 14) }, () => '<div class="card back"></div>').join('') + '<b class="fan-n">' + p.handCount + '</b>' + '</div>' : ''}<div class="ring"><span data-timer>${turnLeft()}</span></div></div><div class="zm"></div>`;
     const zm = z.querySelector('.zm'); const mine = v.melds.map((m, i) => [m, i]).filter(([m]) => m.owner === seat);
     if (!mine.length) zm.innerHTML = '<div class="none">' + (seat === v.me.seat ? 'Še nisi odprt. Izberi 3+ kart in klikni Položi.' : 'Še ni odprt') + '</div>';
     mine.forEach(([m, i]) => { const e = document.createElement('div'); e.className = 'meld'; e.dataset.mi = i; e.dataset.n = m.cards.length; const cs4 = m.cards.map((x) => parse(x.c)); const vv = validate(cs4); if (vv && vv.type === 'set' && m.cards.length === 4) e.classList.add('complete'); if (vv && vv.type === 'run' && m.cards.length >= 10) e.classList.add('complete');
