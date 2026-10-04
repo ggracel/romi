@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       await admin.from("romi_players").delete().eq("user_id", uid);
       const { data: rr, error } = await admin.from("romi_rooms").insert({ name: "Dnevni izziv", admin: uid, turn_time: 120, private: true }).select().single();
       if (error) throw error;
-      const ps = [{ room_id: rr.id, user_id: uid, name: displayName(user), seat: 0, is_bot: false }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Bot Ana", seat: 1, is_bot: true }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Bot Bor", seat: 2, is_bot: true }];
+      const ps = [{ room_id: rr.id, user_id: uid, name: displayName(user), seat: 0, is_bot: false }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Ana", seat: 1, is_bot: true }, { room_id: rr.id, user_id: crypto.randomUUID(), name: "Bor", seat: 2, is_bot: true }];
       await admin.from("romi_players").insert(ps);
       const g = E.newGame(ps, 120, 9999); g.seed = E.seedOf("romi-" + d); g.maxRounds = 1; g.daily = d; g.starter = 0;
       E.startRound(g, now);

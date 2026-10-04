@@ -98,7 +98,7 @@ export function computeAwards(g) {
   for (const p of humans) {
     const place = order.findIndex((x) => x.seat === p.seat);
     const parts = [];
-    if (g.daily) { parts.push({ label: 'Dnevni izziv odigran', n: 20 }); if (place === 0) parts.push({ label: 'Premagal si bote', n: 30 }); }
+    if (g.daily) { parts.push({ label: 'Dnevni izziv odigran', n: 20 }); if (place === 0) parts.push({ label: 'Zmaga v izzivu', n: 30 }); }
     else { parts.push({ label: 'Odigrana igra', n: 20 }); const pb = [60, 30, 15][place]; if (pb) parts.push({ label: (place + 1) + '. mesto', n: pb }); }
     for (const [k, n] of Object.entries(p.ev || {})) if (COIN_EV[k] && n) parts.push({ label: COIN_EV[k].label + (n > 1 ? ' ×' + n : ''), n: COIN_EV[k].n * n });
     let total = parts.reduce((a, x) => a + x.n, 0);
@@ -294,8 +294,8 @@ export function checkAbandon(g, now) {
 /* igralec zapusti igro: namesto njega igra bot; če ne ostane noben človek, se igra konča */
 export function quit(g, seat, now) {
   const p = g.players[seat]; if (!p || p.left) return;
-  p.left = true; p.bot = true; p.ready = true; p.name = p.name + ' (bot)';
-  g.log.push({ t: now, m: p.name.replace(' (bot)', '') + ' je zapustil igro, namesto njega igra bot.' });
+  p.left = true; p.bot = true; p.ready = true; p.name = p.name + ' (avtomatsko)';
+  g.log.push({ t: now, m: p.name.replace(' (avtomatsko)', '') + ' je zapustil igro, njegove karte igra računalnik.' });
   if (g.phase === 'roundEnd' && g.players.every((x) => x.ready)) startRound(g, now);
   checkAbandon(g, now);
 }
@@ -380,6 +380,6 @@ export function botStep(g, now) {
       pick = [...pool].sort((a, b) => useful(a, p.hand) - useful(b, p.hand) || val(parse(b)) - val(parse(a)))[0];
     }
     act(g, seat, { type: 'discard', id: pick }, now);
-  } catch (e) { g.log.push({ t: now, m: 'Bot ' + p.name + ' napaka: ' + e.message }); autoMove(g, now); }
+  } catch (e) { g.log.push({ t: now, m: p.name + ' je potezo odigral samodejno.' }); autoMove(g, now); }
   return true;
 }
