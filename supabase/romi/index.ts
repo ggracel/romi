@@ -35,7 +35,7 @@ const SHOP = { back_classic: 0, face_classic: 0, back_markec: 0, back_jozi: 0, b
 const TASKS = {
   play1: { label: "Odigraj eno igro do konca", target: 1 }, daily: { label: "Odigraj dnevni izziv", target: 1 },
   lay3: { label: "Položi 3 kombinacije", target: 3, ev: "lay" }, swap: { label: "Zamenjaj jokerja na mizi", target: 1, ev: "swap" },
-  run5: { label: "Položi niz s 5 kartami ali več", target: 1, ev: "run5" }, out2: { label: "Pojdi ven v 2 rundah", target: 2, ev: "out" },
+  run5: { label: "Položi niz s 5 kartami ali več", target: 1, ev: "run5" }, out2: { label: "Zmagaj 2 rundi (prvi ostani brez kart)", target: 2, ev: "out" },
   add3: { label: "Dodaj 3 karte k tujim kombinacijam", target: 3, ev: "add" }, set4: { label: "Položi set štirih enakih", target: 1, ev: "set4" },
 };
 const TASK_REW = 15, TASK_BONUS = 20;

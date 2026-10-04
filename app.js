@@ -140,7 +140,7 @@ function applySort(mode) { const v = S.view; if (!v) return; S.handOrder = sortH
 
 /* ================= telefon / tablica ================= */
 function layoutMode() {
-  const w = innerWidth, h = innerHeight, b = document.body.classList; const mob = w < 1000 || h < 600;
+  const w = innerWidth, h = innerHeight, b = document.body.classList; const mob = w < 1100 || h < 600;
   b.toggle('mob', mob); b.toggle('por', mob && h >= w); b.toggle('land', mob && w > h); b.toggle('tab', mob && Math.min(w, h) >= 700);
   if (!mob) b.remove('menu-open');
 }
@@ -312,7 +312,7 @@ function render(prev) {
         if (opt && opt.swap === k) { ce.classList.add('swap'); const sp = document.createElement('button'); sp.className = 'pad sw'; sp.dataset.side = 'swap'; sp.innerHTML = '⇄<small>zamenjaj</small>'; sp.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'swap'); }; ce.appendChild(sp); }
         e.appendChild(ce); });
       if (opt && opt.swap !== undefined) { e.classList.add('swapable'); e.onclick = () => doAdd(i, 'swap'); }
-      else if (opt && opt.lo && opt.hi) { e.classList.add('two'); const L = document.createElement('button'); L.className = 'pad lo'; L.dataset.side = 'lo'; L.innerHTML = `<i>◀</i>2 = ${opt.lo.as.r}${opt.lo.as.s}`; L.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'lo'); }; const R = document.createElement('button'); R.className = 'pad hi'; R.dataset.side = 'hi'; R.innerHTML = `2 = ${opt.hi.as.r}${opt.hi.as.s}<i>▶</i>`; R.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'hi'); }; e.prepend(L); e.appendChild(R); }
+      else if (opt && opt.lo && opt.hi) { e.classList.add('two'); const L = document.createElement('button'); L.className = 'pad lo'; L.dataset.side = 'lo'; L.innerHTML = `<i>◀ 2 =</i>${opt.lo.as.r}${opt.lo.as.s}`; L.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'lo'); }; const R = document.createElement('button'); R.className = 'pad hi'; R.dataset.side = 'hi'; R.innerHTML = `<i>2 = ▶</i>${opt.hi.as.r}${opt.hi.as.s}`; R.onclick = (ev) => { ev.stopPropagation(); doAdd(i, 'hi'); }; e.prepend(L); e.appendChild(R); }
       else e.onclick = () => doAdd(i);
       zm.appendChild(e); });
     if (seat === v.me.seat) { const away = v.melds.flatMap((m, i) => m.cards.filter((x) => x.by === seat && m.owner !== seat).map((x) => ({ x, m, i })));
@@ -329,7 +329,7 @@ function render(prev) {
   const pv = $('#prev');
   if (cs.length >= 2) { const arr = arrange(cs, val3); pv.className = 'prev on ' + (val3 ? '' : 'bad');
     pv.innerHTML = val3 ? `<span class="lab">${val3.label}</span>` + arr.map((x) => x.as ? `<span class="pc j">2 = ${x.as.r}${x.as.s !== '?' ? x.as.s : ''}</span>` : `<span class="pc ${red(x.c.s) ? 'red' : ''}">${x.c.r}${x.c.s}</span>`).join('') : `<span class="lab">Ni veljavno</span>` + cs.map((c) => `<span class="pc ${red(c.s) ? 'red' : ''}">${c.r}${c.s}</span>`).join(''); }
-  else if (myTurn && v.phase === 'draw') { pv.className = 'prev on draw'; pv.innerHTML = '<span class="lab">Najprej povleci</span><span class="dh">Tapni kup ali odložene karte ↑</span>'; }
+  else if (myTurn && v.phase === 'draw') { pv.className = 'prev on draw'; pv.innerHTML = '<span class="lab">Najprej povleci</span><span class="dh">Tapni kup ali odložene ↑</span>'; }
   else pv.className = 'prev';
   const keep = v.turnsInRound < v.playersCount ? 2 : 1;
   const canLay = myTurn && v.phase === 'play' && val3 && v.me.hand.length - cs.length >= keep;
@@ -538,7 +538,7 @@ async function renderToday() {
   else chal = `<div class="tc chal done"><span class="badge ok">Opravljeno ✓</span><span class="mono">Dnevni izziv</span><h3>Tvoj rezultat: ${dr.score} točk</h3><p>${top.length < 2 ? 'Zaenkrat si edini. Povej prijateljem, naj te poskusijo premagati.' : myRank === 1 ? 'Trenutno vodiš. Če zdržiš do polnoči, dobiš še +25 cekinov.' : 'Na ' + myRank + '. mestu si. Vodi ' + esc(top[0].name) + ' s ' + top[0].score + ' točkami.'}</p>${board}</div>`;
   // dnevne naloge
   const tasks = info.tasks || []; const nDone = tasks.filter((t) => t.claimed).length; const allC = info.tasksBonus && info.tasksBonus.claimed;
-  const trows = tasks.map((t) => `<div class="tk ${t.claimed ? 'claimed' : t.progress >= t.target ? 'ready' : ''}"><div class="tk-t"><span>${esc(t.label)}</span><div class="bar"><i style="width:${Math.round(t.progress / t.target * 100)}%"></i></div><small>${t.progress}/${t.target}</small></div>${t.claimed ? '<span class="tk-ok">✓</span>' : t.progress >= t.target ? `<button class="btn pri" data-task="${t.key}">Poberi +${t.reward}</button>` : `<span class="tk-rw"><span class="coin">Q</span>${t.reward}</span>`}</div>`).join('');
+  const trows = tasks.map((t) => `<div class="tk ${t.claimed ? 'claimed' : t.progress >= t.target ? 'can' : ''}"><div class="tk-t"><span>${esc(t.label)}</span><div class="bar"><i style="width:${Math.round(t.progress / t.target * 100)}%"></i></div><small>${t.progress}/${t.target}</small></div>${t.claimed ? '<span class="tk-ok">✓</span>' : t.progress >= t.target ? `<button class="btn pri" data-task="${t.key}">Poberi +${t.reward}</button>` : `<span class="tk-rw"><span class="coin">Q</span>${t.reward}</span>`}</div>`).join('');
   const tcard = `<div class="tc tasks ${allC ? 'done' : nDone < tasks.length ? 'hot2' : ''}"><span class="badge ${allC ? 'ok' : ''}">${allC ? 'Vse opravljeno ✓' : nDone + '/' + tasks.length + ' opravljeno'}</span><span class="mono">Dnevne naloge</span><h3>${allC ? 'Mašina! Jutri nove naloge.' : 'Trije mali cilji za danes'}</h3><p>Vsaka +15, vse tri še bonus +${info.tasksBonus ? info.tasksBonus.amount : 20}. Štejejo vse igre.</p>${trows}</div>`;
   // pozdrav
   const head = avail ? ['Ej ' + nm + ', lepo te je videt!', 'Dnevni cekini te že čakajo. Poberi jih, potem pa pokaži kartam, kdo je šef.'] : !dr ? ['Ej ' + nm + ', a greš na današnji izziv?', 'Ista mešanica kart za vse. Danes je lahko tvoj dan.'] : !allC ? ['Dobro ti gre, ' + nm + '!', 'Še malo do vseh nalog. Vsaka igra šteje.'] : ['Šef, ' + nm + '!', 'Za danes si vse opravil. Jutri pridi po novo nagrado, niz te čaka.'];

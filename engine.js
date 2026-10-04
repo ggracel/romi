@@ -69,11 +69,26 @@ export function swapIndex(meld, card) {
 }
 export function addOptions(meld, card) {
   const si = swapIndex(meld, card); if (si >= 0) return { swap: si };
-  const base = meld.cards.map((x) => x.c); const test = validate([...base, card]); if (!test) return null;
-  if (test.type === 'set' || !isJ(card)) return { test, lo: null, hi: null, auto: arrange([...base, card], test) };
-  const lo = arrange([card, ...base], test), hi = arrange([...base, card], test);
-  const loOk = lo[0].c.id === card.id, hiOk = hi[hi.length - 1].c.id === card.id;
-  return { test, lo: loOk ? { arr: lo, as: lo.find((x) => x.c.id === card.id).as } : null, hi: hiOk ? { arr: hi, as: hi.find((x) => x.c.id === card.id).as } : null, auto: hiOk ? hi : lo };
+  const base = meld.cards.map((x) => x.c); const bt = validate(base);
+  // set: dovolj je, da je kombinacija še veljavna (največ 4 karte)
+  if (!bt || bt.type === 'set') { const test = validate([...base, card]); if (!test || test.type !== 'set') return null; return { test, lo: null, hi: null, auto: arrange([...base, card], test) }; }
+  // niz: obstoječe karte (in jokerji) ostanejo na svojih mestih, nova karta gre lahko samo na začetek ali konec
+  if (meld.cards.length >= 13) return null;
+  const suit = meld.cards.find((x) => !isJ(x.c)).c.s;
+  const vOf = (x, atEnd) => { const r = isJ(x.c) ? x.as && x.as.r : x.c.r; if (!r || r === '?') return null; const v = RANKS.indexOf(r) + 1; return v === 1 && atEnd ? 14 : v; };
+  const lo = vOf(meld.cards[0], false), hi = vOf(meld.cards[meld.cards.length - 1], true);
+  if (lo == null || hi == null) return null;
+  const fits = (v) => (isJ(card) ? true : card.s === suit && (RANKS.indexOf(card.r) + 1 === v || (v === 14 && card.r === 'A')));
+  const show = (v) => RANKS[(v === 14 ? 1 : v) - 1];
+  const cur = meld.cards.map((x) => ({ c: x.c, as: x.as }));
+  const mk = (v, side) => { const item = { c: card, as: isJ(card) ? { r: show(v), s: suit } : null }; return { arr: side === 'lo' ? [item, ...cur] : [...cur, item], as: item.as || { r: show(v), s: suit } }; };
+  const loV = lo - 1, hiV = hi + 1;
+  const L = loV >= 1 && fits(loV) ? mk(loV, 'lo') : null;
+  const H = hiV <= 14 && fits(hiV) ? mk(hiV, 'hi') : null;
+  if (!L && !H) return null;
+  const test = { type: 'run', label: bt.label, mode: H && hiV === 14 ? 'aceHigh' : 'normal' };
+  if (!isJ(card)) return { test, lo: null, hi: null, auto: (H || L).arr };
+  return { test, lo: L, hi: H, auto: (H || L).arr };
 }
 
 /* vrednost karte na mizi (joker = karta, ki jo nadomešča; set jokerjev = 25) */
