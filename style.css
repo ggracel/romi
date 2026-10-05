@@ -874,3 +874,10 @@ body:not(.mob) #scores{min-width:0;overflow:hidden}
 @media (max-width:1460px){body:not(.mob) #scores .chip{padding-right:8px}body:not(.mob) #scores .chip em{display:none}}
 @media (max-width:1280px){body:not(.mob) #scores{display:none!important}}
 @media (max-width:420px){.mob .rd .ok{display:none}.mob .rd.got{background:rgba(90,216,174,.08)}}
+
+/* v21: večje polje za odlaganje med vlečenjem */
+body.dragging #pDis.dz{z-index:5}
+body.dragging #pDis.dz::before{content:"";position:absolute;inset:-56px;border:2px dashed rgba(70,190,197,.45);border-radius:20px;background:rgba(70,190,197,.06);pointer-events:none;transition:background .15s,border-color .15s}
+body.mob.dragging #pDis.dz::before{inset:-28px;border-radius:14px}
+body.dragging #pDis.dz.drop-over::before{border-color:var(--teal);background:rgba(70,190,197,.16)}
+.shop-game{color:var(--teal);margin-top:-4px}

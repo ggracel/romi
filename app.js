@@ -325,7 +325,7 @@ let timerIv = null, pollIv = null;
 async function startGame() {
   show('game'); S.sel.clear(); S.order = []; S.prevTurn = null; S.prevRound = 0;
   $('#gRoom').textContent = S.room.name;
-  const isAdmin = S.room.admin === S.user.id && !S.room.private; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bSave').hidden = !isAdmin; $('#bResume').hidden = !isAdmin;
+  const isAdmin = S.room.admin === S.user.id && !S.room.private; $('#bPause').hidden = !isAdmin; $('#bEnd').hidden = !isAdmin; $('#bSave').hidden = !isAdmin; $('#bResume').hidden = !isAdmin; $('#bShop').hidden = !!S.room.private;
   await call({ action: 'view' }, { quiet: true });
   clearInterval(timerIv); timerIv = setInterval(tickTimer, 500); wake();
   clearInterval(pollIv); pollIv = setInterval(() => { if (document.body.dataset.screen === 'game' && !S.busy) call({ action: 'view' }, { quiet: true }); }, 8000);
@@ -334,7 +334,19 @@ function applyView(v) {
   const prev = S.view; S.view = v; S.offset = Date.now() - v.now;
   // izbor očisti, če kart ni več v roki
   S.order = S.order.filter((id) => v.me.hand.includes(id)); S.sel = new Set(S.order);
-  render(prev);
+  render(prev); animDraws(prev, v);
+}
+function animDraws(prev, v) {
+  const key = (l) => l.t + '|' + l.m; const log = v.log || [];
+  if (!prev || !prev.log || prev.id !== v.id || document.body.dataset.screen !== 'game') return;
+  const last = prev.log.length ? key(prev.log[prev.log.length - 1]) : null; let i = last ? log.map(key).lastIndexOf(last) : -1; if (last && i < 0) return;
+  const fresh = log.slice(i + 1); if (!fresh.length || fresh.length > 8) return;
+  const map = seatMap(); const zoneOf = {}; Object.entries(map).forEach(([z, s]) => (zoneOf[s] = z)); let k = 0;
+  fresh.forEach((l) => { const m = l.m.match(/^(.+) je (potegnil s kupa|vzel (\S+) z odloženih|vzel cel kupček)/); if (!m) return;
+    const p = v.players.find((x) => x.name === m[1]); if (!p || p.seat === v.me.seat) return; const z = $(`.zone[data-z="${zoneOf[p.seat]}"]`); if (!z || z.hidden) return;
+    const deck = m[2].startsWith('potegnil'); const src = deck ? $('#pDeck .stack') : $('#disStack'); const dst = z.querySelector('.fan') || z.querySelector('.av'); if (!src || !dst) return;
+    const fr = rectOf(src); const cw = fr.w || 60, ch = fr.h || 86; const from = { x: fr.x, y: fr.y, w: cw, h: ch }; const tr = rectOf(dst); const to = { x: tr.x + tr.w / 2 - cw * .2, y: tr.y + tr.h / 2 - ch * .2, w: cw * .4, h: ch * .4 };
+    const node = m[3] ? cardEl(m[3]) : backEl(); if (node.dataset) delete node.dataset.id; fly(node, from, to, { dur: 560, delay: k++ * 140, rot: -8 }); });
 }
 function seatMap() { // moj sedež spodaj, ostali v smeri urinega kazalca: levo, zgoraj, desno
   const v = S.view; const n = v.players.length; const me = v.me.seat; const order = []; for (let i = 1; i < n; i++) order.push((me + i) % n);
@@ -519,23 +531,25 @@ function dealAnim() {
 }
 /* drag & drop iz roke */
 (function () { let drag = null;
+  const nearDis = (x, y) => { const p = $('#pDis'); if (!p || !p.classList.contains('dz')) return false; const r = p.getBoundingClientRect(); const pad = document.body.classList.contains('mob') ? 28 : 56; return x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad; };
+  const endDrag = () => { document.body.classList.remove('dragging'); const p = $('#pDis'); if (p) p.classList.remove('dz'); $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); };
   document.addEventListener('pointerdown', (e) => { const c = e.target.closest('#hand .card'); if (!c || e.button !== 0) return; drag = { id: c.dataset.id, x: e.clientX, y: e.clientY, ghost: null, moved: false }; });
   document.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved) { if (Math.hypot(dx, dy) < 8) return; drag.moved = true; S.sel.clear(); S.order = []; if (!needDraw()) toggleSel(drag.id); else render();
-      const el = $(`#hand .card[data-id="${CSS.escape(drag.id)}"]`); const r = el.getBoundingClientRect(); drag.ox = e.clientX - r.left; drag.oy = e.clientY - r.top; drag.ghost = el.cloneNode(true); drag.ghost.classList.add('ghost', 'drag'); drag.ghost.classList.remove('sel'); drag.ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:90;pointer-events:none;transform:rotate(-4deg) scale(1.05)`; document.body.appendChild(drag.ghost); el.style.visibility = 'hidden'; document.body.classList.add('dragging'); }
+      const el = $(`#hand .card[data-id="${CSS.escape(drag.id)}"]`); const r = el.getBoundingClientRect(); drag.ox = e.clientX - r.left; drag.oy = e.clientY - r.top; drag.ghost = el.cloneNode(true); drag.ghost.classList.add('ghost', 'drag'); drag.ghost.classList.remove('sel'); drag.ghost.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:90;pointer-events:none;transform:rotate(-4deg) scale(1.05)`; document.body.appendChild(drag.ghost); el.style.visibility = 'hidden'; document.body.classList.add('dragging'); $('#pDis').classList.toggle('dz', !$('#bDis').disabled); }
     drag.ghost.style.left = (e.clientX - drag.ox) + 'px'; drag.ghost.style.top = (e.clientY - drag.oy) + 'px';
-    $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const t = document.elementFromPoint(e.clientX, e.clientY); const tgt = t && (t.closest('.pad') || t.closest('.meld.can') || t.closest('#pDis') || (t.closest('#hand .card') && t.closest('#hand .card').dataset.id !== drag.id ? t.closest('#hand .card') : null)); if (tgt) tgt.classList.add('drop-over'); });
+    $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const t = document.elementFromPoint(e.clientX, e.clientY); const tgt = t && (t.closest('.pad') || t.closest('.meld.can') || t.closest('#pDis') || (t.closest('#hand .card') && t.closest('#hand .card').dataset.id !== drag.id ? t.closest('#hand .card') : null)); const tg = tgt || (nearDis(e.clientX, e.clientY) ? $('#pDis') : null); if (tg) tg.classList.add('drop-over'); });
   document.addEventListener('pointerup', (e) => { if (!drag) return; const d = drag; drag = null; if (!d.moved) return;
-    d.ghost.remove(); document.body.classList.remove('dragging'); $$('.drop-over').forEach((x) => x.classList.remove('drop-over'));
+    d.ghost.remove(); const nd = nearDis(e.clientX, e.clientY); endDrag();
     const el = $(`#hand .card[data-id="${CSS.escape(d.id)}"]`); if (el) el.style.visibility = '';
     const t = document.elementFromPoint(e.clientX, e.clientY); if (!t) return;
-    const pad = t.closest('.pad'); const meld = t.closest('.meld'); const dis = t.closest('#pDis');
+    const pad = t.closest('.pad'); const meld = t.closest('.meld'); const dis = t.closest('#pDis') || (nd && !t.closest('.meld') && !t.closest('#hand'));
     const hc = t.closest('#hand .card');
     if (pad && meld) doAdd(+meld.dataset.mi, pad.dataset.side); else if (meld && meld.classList.contains('swapable')) doAdd(+meld.dataset.mi, 'swap'); else if (meld && meld.classList.contains('can')) doAdd(+meld.dataset.mi); else if (dis && !$('#bDis').disabled) doDiscard();
     else if (hc && hc.dataset.id !== d.id) { const r = hc.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; const o = S.handOrder.filter((x) => x !== d.id); let idx = o.indexOf(hc.dataset.id) + (after ? 1 : 0); o.splice(idx, 0, d.id); S.handOrder = o; S.sel.clear(); S.order = []; render(); }
     else if (t.closest('#hand') || t.closest('.me')) { S.sel.clear(); S.order = []; render(); } });
   // na telefonu lahko brskalnik prekine vlečenje (npr. drsenje strani): počisti
-  document.addEventListener('pointercancel', () => { if (!drag) return; const d = drag; drag = null; if (d.ghost) d.ghost.remove(); document.body.classList.remove('dragging'); $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); const el = $(`#hand .card[data-id="${CSS.escape(d.id)}"]`); if (el) el.style.visibility = ''; });
+  document.addEventListener('pointercancel', () => { if (!drag) return; const d = drag; drag = null; if (d.ghost) d.ghost.remove(); endDrag(); const el = $(`#hand .card[data-id="${CSS.escape(d.id)}"]`); if (el) el.style.visibility = ''; });
 })();
 /* ozadje: poligoni, nariše se enkrat */
 function drawBg() { const c = $('#bg canvas'), x = c.getContext('2d'); function d() { c.width = innerWidth; c.height = innerHeight; x.clearRect(0, 0, c.width, c.height); const pts = []; for (let i = 0; i < 70; i++) pts.push([Math.random() * c.width, Math.random() * c.height]); x.strokeStyle = 'rgba(70,190,197,.07)'; x.lineWidth = 1; pts.forEach((p, i) => { pts.slice(i + 1).forEach((q) => { const dd = Math.hypot(p[0] - q[0], p[1] - q[1]); if (dd < 190) { x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(q[0], q[1]); x.stroke(); } }); }); } d(); addEventListener('resize', d); }
@@ -674,7 +688,8 @@ async function startDaily() {
 $('#coinChip').onclick = () => openShop();
 $('#shopX').onclick = () => ($('#mShop').hidden = true);
 $('#mShop').addEventListener('click', (e) => { if (e.target.id === 'mShop') $('#mShop').hidden = true; });
-function openShop() { renderShop(); $('#mShop').hidden = false; }
+function openShop() { $('#shopGame').hidden = document.body.dataset.screen !== 'game'; renderShop(); $('#mShop').hidden = false; }
+$('#bShop').onclick = async () => { document.body.classList.remove('menu-open'); const r = await call({ action: 'wallet' }, { quiet: true }); if (r && r.wallet) S.wallet = r.wallet; openShop(); };
 function renderShop() {
   const w = S.wallet || { coins: 0, owned: ['back_classic', 'face_classic'], back: 'classic', face: 'classic', felt: 'classic' }; setCoins(w.coins);
   $('#shopList').innerHTML = SHOP.map((it, i) => { const own = w.owned.includes(it.id) || it.id.endsWith('_classic'); const eq = (w[it.kind] || 'classic') === it.id.split('_')[1];
