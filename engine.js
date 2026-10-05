@@ -345,7 +345,7 @@ function endRound(g, winnerSeat, now) {
   });
   rows.forEach((r) => { g.players[r.seat].score += r.sum; });
   g.rounds.push(rows.map((r) => r.sum));
-  g.roundEnd = { round: g.round, winner: winnerSeat, rows, at: now };
+  g.roundEnd = { round: g.round, winner: winnerSeat, rows, at: now }; g.outs = [...(g.outs || []), winnerSeat];
   g.phase = 'roundEnd'; g.starter = winnerSeat; g.players.forEach((p) => (p.ready = !!p.bot || !!p.away));
   g.log.push({ t: now, m: g.players[winnerSeat].name + ' je šel ven. Konec runde ' + g.round + '.' });
   const over = g.players.filter((p) => p.score >= g.goal);

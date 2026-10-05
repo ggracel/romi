@@ -69,6 +69,16 @@ function jwtUser(token) {
 function savedSum(g) {
   return { round: g.round, goal: g.goal, turn: g.players[g.turn]?.name, players: g.players.map((p) => ({ id: p.id, name: p.name.replace(" (avtomatsko)", ""), score: p.score, bot: !!p.bot && !p.left, away: !!p.away })) };
 }
+// dnevnik: ena vrstica na zaključeno igro (za vse človeške igralce)
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function saveHistory(roomId, roomName, g) {
+  if (g.histDone || g.abandoned) return; g.histDone = true;
+  const players = g.players.map((p) => ({ seat: p.seat, id: p.id, name: p.name.replace(" (avtomatsko)", ""), score: p.score, bot: !!p.bot && !p.left, coins: g.awards?.[p.seat]?.credited ?? null }));
+  const ids = g.players.filter((p) => (!p.bot || p.left) && UUID.test(String(p.id))).map((p) => p.id);
+  if (!ids.length) return;
+  const { error } = await admin.from("romi_history").upsert({ room_id: roomId, name: roomName, kind: g.daily ? "daily" : g.campaign ? "campaign" : "room", goal: g.goal, winner: g.winner ?? null, is_natural: !!g.finishedNaturally || !!g.daily, players, rounds: g.rounds || [], outs: g.outs && g.outs.length === (g.rounds || []).length ? g.outs : null, user_ids: ids }, { onConflict: "room_id" });
+  if (error) console.error("history", error);
+}
 function ue(m) { const e = new Error(m); e.user = true; return e; }
 function displayName(user) {
   const m = user.user_metadata || {};
@@ -238,7 +248,7 @@ Deno.serve(async (req) => {
     if (action === "end") {
       if (r.admin !== uid) throw ue("Samo admin.");
       const g = await loadGame(roomId);
-      if (g) { g.status = "finished"; g.log.push({ t: now, m: "Admin je končal igro." }); await saveGame(roomId, g); }
+      if (g) { g.status = "finished"; g.log.push({ t: now, m: "Admin je končal igro." }); if (g.rounds && g.rounds.length) { if (g.winner == null) g.winner = [...g.players].sort((a, b) => b.score - a.score)[0].seat; await saveHistory(roomId, r.name, g); } await saveGame(roomId, g); }
       await bump(roomId, { status: "finished" }); return ok({});
     }
 
@@ -280,6 +290,7 @@ Deno.serve(async (req) => {
       // prosto mesto za druge sobe; admin preide na naslednjega človeka
       await admin.from("romi_players").delete().eq("room_id", roomId).eq("user_id", uid);
       if (r.admin === uid) { const next = g.players.find((p) => !p.bot && !p.left); if (next) await admin.from("romi_rooms").update({ admin: next.id }).eq("id", roomId); }
+      if (g.status === "finished" && !g.abandoned && !g.histDone) await saveHistory(roomId, r.name, g);
       await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
       return ok({ quit: true });
     }
@@ -357,6 +368,7 @@ Deno.serve(async (req) => {
           if (g.daily) await admin.from("romi_daily_results").update({ score: g.rounds[0]?.[+st] ?? p.score, won: a.place === 0 }).eq("day", g.daily).eq("user_id", p.id);
         }
       }
+      if (g.status === "finished" && !g.abandoned && !g.histDone) await saveHistory(roomId, r.name, g);
       await Promise.all([saveGame(roomId, g), bump(roomId, g.status === "finished" ? { status: "finished" } : {})]);
     }
     return ok({ view: E.view(g, seat, now) });

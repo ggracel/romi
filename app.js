@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=14';
+import * as E from './engine.js?v=15';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -210,7 +210,7 @@ async function loadRooms() {
   renderRooms();
 }
 async function enterLobby() {
-  unwake(); document.body.classList.remove('menu-open'); show('lobby'); loadLeaderboard(); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
+  unwake(); document.body.classList.remove('menu-open'); show('lobby'); loadLeaderboard(); loadHist().then(histMini); await loadRooms(); subscribeRooms(() => { if (document.body.dataset.screen === 'lobby') loadRooms(); });
   // če sem že v sobi (npr. osvežitev strani), me vrni vanjo
   loadCamp().then(() => renderToday()); loadWallet();
   const mine = S.allPlayers.find((p) => p.user_id === S.user.id); const r = mine && S.rooms.find((x) => x.id === mine.room_id);
@@ -700,6 +700,51 @@ function renderShop() {
   $$('#shopList [data-buy]').forEach((b) => (b.onclick = async () => { const it = SHOP.find((x) => x.id === b.dataset.buy); if (!confirm('Kupiš "' + it.name + '" za ' + it.price + ' cekinov?')) return; const r = await call({ action: 'buy', item: it.id }); if (!r) return; const r2 = await call({ action: 'equip', item: it.id }); S.wallet = (r2 || r).wallet; applyLook(S.wallet); renderShop(); toast('Kupljeno in izbrano: ' + it.name, 'ok'); }));
   $$('#shopList [data-eq]').forEach((b) => (b.onclick = async () => { const r = await call({ action: 'equip', item: b.dataset.eq }); if (!r) return; S.wallet = r.wallet; applyLook(S.wallet); renderShop(); }));
 }
+
+/* ================= dnevnik iger ================= */
+const H_KIND = { room: 'S prijatelji', daily: 'Dnevni izziv', campaign: 'Popotovanje' };
+function mockHist() { const now = Date.now(); const P = (n, s, seat) => ({ name: n, score: s, seat, id: n === 'Gašper' ? S.user.id : n.toLowerCase() });
+  return [
+    { id: 'h1', name: 'Petkov večer', kind: 'room', finished_at: new Date(now - 36e5 * 3).toISOString(), goal: 500, winner: 0, is_natural: true, players: [{ ...P('Gašper', 520, 0), coins: 95 }, P('Jaka', 410, 1), P('Nejc', 120, 2)], rounds: [[60, 35, -20], [45, 80, 15], [115, 40, -30], [80, 60, 45], [70, 75, 10], [90, 60, 55], [60, 60, 45]], outs: [0, 1, 0, 2, 1, 0, 0] },
+    { id: 'h2', name: 'Dnevni izziv', kind: 'daily', finished_at: new Date(now - 864e5).toISOString(), goal: 9999, winner: 1, is_natural: true, players: [{ ...P('Gašper', 55, 0), coins: 20 }, P('Maja', 85, 1), P('Jaka', -40, 2), P('Nejc', 10, 3)], rounds: [[55, 85, -40, 10]], outs: [1] },
+    { id: 'h3', name: 'Kampanja · 3. Pri šanku', kind: 'campaign', finished_at: new Date(now - 864e5 * 2).toISOString(), goal: 200, winner: 0, is_natural: true, players: [{ ...P('Gašper', 215, 0), coins: 40 }, P('Markec', 130, 1)], rounds: [[90, 30], [-15, 70], [140, 30]], outs: [0, 1, 0] },
+    { id: 'h4', name: 'g', kind: 'room', finished_at: new Date(now - 864e5 * 4).toISOString(), goal: 500, winner: 1, is_natural: true, players: [P('Jaka', 530, 0), { ...P('Gašper', -35, 1), coins: 91 }].map((p, i) => ({ ...p, seat: i })), rounds: [[35, -15], [60, -40], [35, 40], [60, -10], [115, 65], [45, 55], [55, -10], [35, -70], [45, 10], [45, -60]], outs: null },
+  ].map((x) => (x.id === 'h4' ? { ...x, winner: 0 } : x)); }
+async function loadHist() {
+  if (MOCK) { S.hist = mockHist(); return S.hist; }
+  const { data, error } = await sb.from('romi_history').select('*').order('finished_at', { ascending: false }).limit(200);
+  if (error) { S.hist = S.hist || []; return S.hist; } S.hist = data || []; return S.hist;
+}
+const fmtWhen = (iso) => { const d = new Date(iso); const t = new Date(); const y = new Date(Date.now() - 864e5); const hm = d.toLocaleTimeString('sl-SI', { hour: '2-digit', minute: '2-digit' }); if (d.toDateString() === t.toDateString()) return 'Danes, ' + hm; if (d.toDateString() === y.toDateString()) return 'Včeraj, ' + hm; return d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear() + ', ' + hm; };
+function myRes(g) { const me = g.players.find((p) => p.id === S.user.id); const order = [...g.players].sort((a, b) => b.score - a.score); return { me, place: me ? order.findIndex((p) => p === me) + 1 : 0, won: me && g.winner === me.seat, order }; }
+function histMini() {
+  const el = $('#hMiniBody'); if (!el) return; const L = (S.hist || []).slice(0, 3);
+  if (!L.length) { el.innerHTML = '<span class="small-note">Tu se bodo pokazale tvoje odigrane igre.</span>'; return; }
+  el.innerHTML = L.map((g) => { const r = myRes(g); return `<button class="hm" data-h="${g.id}"><span class="hm-p ${r.won ? 'w' : ''}">${r.place}.</span><span class="hm-n">${esc(g.name || H_KIND[g.kind])}<small>${fmtWhen(g.finished_at)} · ${g.players.length} igralci</small></span><b>${r.me ? r.me.score : ''}</b></button>`; }).join('');
+  $$('#hMiniBody [data-h]').forEach((b) => (b.onclick = () => openHist(b.dataset.h)));
+}
+async function openHist(openId) {
+  unwake(); document.body.classList.remove('menu-open'); show('hist'); S.histOpen = openId || null; if (openId) S.histKind = '';
+  if (!S.hist) $('#hList').innerHTML = '<span class="small-note">Nalagam …</span>';
+  await loadHist(); renderHist();
+  if (openId) { const e = $(`#hList [data-h="${CSS.escape(openId)}"]`); if (e) e.scrollIntoView({ block: 'center' }); }
+}
+function renderHist() {
+  const all = S.hist || []; const k = S.histKind || ''; const L = all.filter((g) => !k || g.kind === k);
+  $$('#hFil button').forEach((b) => b.classList.toggle('on', b.dataset.k === k));
+  const mine = all.map(myRes).filter((r) => r.me); const wins = mine.filter((r) => r.won).length; const best = mine.length ? Math.max(...mine.map((r) => r.me.score)) : 0; const coins = mine.reduce((s, r) => s + (r.me.coins || 0), 0);
+  $('#hSum').innerHTML = [['Odigrane igre', all.length], ['Zmage', wins], ['Najboljši rezultat', mine.length ? best : '-'], ['Prisluženi cekini', coins]].map(([l, v], i) => `<div class="hs"><small>${l}</small><b>${i === 3 ? '<span class="coin">Q</span>' : ''}${v}</b></div>`).join('');
+  if (!L.length) { $('#hList').innerHTML = `<div class="hempty">${all.length ? 'V tej kategoriji še ni iger.' : 'Še nimaš zaključenih iger. Ko odigraš igro do konca, se pokaže tukaj z vsemi rezultati.'}</div>`; return; }
+  $('#hList').innerHTML = L.map((g) => { const r = myRes(g); const open = S.histOpen === g.id; const n = g.players.length;
+    const rows = (g.rounds || []).map((rd, i) => `<tr><td>${i + 1}</td>${g.players.map((p) => `<td class="${rd[p.seat] > 0 ? 'pos' : rd[p.seat] < 0 ? 'neg' : ''}">${g.outs && g.outs[i] === p.seat ? '<i class="out" title="šel ven"></i>' : ''}${rd[p.seat] > 0 ? '+' : ''}${rd[p.seat] ?? ''}</td>`).join('')}</tr>`).join('');
+    const tbl = `<div class="hdet"><table class="htbl"><thead><tr><th>Runda</th>${g.players.map((p) => `<th><i style="background:${COLORS[p.seat]}"></i>${esc(p.name)}${p.id === S.user.id ? ' (ti)' : ''}</th>`).join('')}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Skupaj</td>${g.players.map((p) => `<td>${p.score}</td>`).join('')}</tr></tfoot></table>${g.outs ? '<small class="small-note"><i class="out"></i> je šel ven v tej rundi</small>' : ''}${!g.is_natural ? '<small class="small-note">Igro je admin končal pred ciljem.</small>' : ''}</div>`;
+    return `<article class="hg ${open ? 'open' : ''} ${r.won ? 'won' : ''}" data-h="${g.id}"><button class="hg-h"><span class="hg-pl"><b>${r.place || '-'}.</b><small>mesto</small></span><span class="hg-t"><b>${esc(g.name || H_KIND[g.kind])}</b><small>${fmtWhen(g.finished_at)} · <span class="kt k-${g.kind}">${H_KIND[g.kind] || ''}</span> · ${(g.rounds || []).length} ${(g.rounds || []).length === 1 ? 'runda' : (g.rounds || []).length === 2 ? 'rundi' : (g.rounds || []).length < 5 ? 'runde' : 'rund'}</small></span><span class="hg-ps">${r.order.map((p) => `<span class="chip ${p.id === S.user.id ? 'you' : ''}"><i style="background:${COLORS[p.seat]}">${ini(p.name)}</i>${esc(p.name)} <em>${p.score}</em>${g.winner === p.seat ? ' <span class="crown">★</span>' : ''}</span>`).join('')}</span><span class="hg-c">${r.me && r.me.coins ? `<span class="coin">Q</span>+${r.me.coins}` : ''}</span><span class="hg-x">⌄</span></button>${open ? tbl : ''}</article>`; }).join('');
+  $$('#hList .hg-h').forEach((b) => (b.onclick = () => { const id = b.parentElement.dataset.h; S.histOpen = S.histOpen === id ? null : id; renderHist(); }));
+}
+$('#btnHist').onclick = () => openHist();
+$('#hMiniAll').onclick = () => openHist();
+$('#histBack').onclick = () => enterLobby();
+$$('#hFil button').forEach((b) => (b.onclick = () => { S.histKind = b.dataset.k; S.histOpen = null; renderHist(); }));
 
 /* ================= lestvica ================= */
 async function loadLeaderboard() {

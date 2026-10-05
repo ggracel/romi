@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 <script defer src="/track.js?v=2"></script>
 </head>
 <body data-screen="boot">
@@ -38,10 +38,20 @@
   <div class="lobby-in">
     <div class="lobby-top">
       <h1><span class="brand-t">foqs.<b>romi</b><i>.</i></span><small>Ustvari sobo ali se pridruži prijateljem. 2 do 4 igralci, do 500 točk.</small></h1>
-      <div class="topbtns"><span class="chip"><i style="background:var(--teal)" id="meIni">G</i><span id="meName">…</span></span><button class="chip coinchip" id="coinChip" title="Cekini in trgovina"><span class="coin">Q</span><b id="coinN">…</b></button><a class="btn" href="https://foqs.si/">Hub</a><button class="btn" id="btnLogout">Odjava</button></div>
+      <div class="topbtns"><span class="chip"><i style="background:var(--teal)" id="meIni">G</i><span id="meName">…</span></span><button class="btn" id="btnHist">Dnevnik</button><button class="chip coinchip" id="coinChip" title="Cekini in trgovina"><span class="coin">Q</span><b id="coinN">…</b></button><a class="btn" href="https://foqs.si/">Hub</a><button class="btn" id="btnLogout">Odjava</button></div>
     </div>
     <section class="today" id="today"></section>
-    <div class="lobby-grid"><div class="rooms" id="rooms"></div><aside class="lb" id="lb"><div class="lb-h"><span class="mono">Lestvica</span><span class="mono lb-sub">vse igre</span></div><div id="lbBody"><span class="small-note">Nalagam …</span></div></aside></div>
+    <div class="lobby-grid"><div class="rooms" id="rooms"></div><div class="side"><aside class="lb" id="lb"><div class="lb-h"><span class="mono">Lestvica</span><span class="mono lb-sub">vse igre</span></div><div id="lbBody"><span class="small-note">Nalagam …</span></div></aside><aside class="lb hmini" id="hMini"><div class="lb-h"><span class="mono">Moje igre</span><button class="lnk mono" id="hMiniAll">Dnevnik →</button></div><div id="hMiniBody"><span class="small-note">Nalagam …</span></div></aside></div></div>
+  </div>
+</section>
+
+<!-- ============ DNEVNIK IGER ============ -->
+<section class="view lobby" data-view="hist" hidden>
+  <div class="lobby-in">
+    <div class="lobby-top"><h1><span class="brand-t">foqs.<b>romi</b><i>.</i></span><small>Dnevnik: tvoje pretekle igre in rezultati</small></h1><div class="topbtns"><button class="btn" id="histBack">← Sobe</button></div></div>
+    <div class="hsum" id="hSum"></div>
+    <div class="hfil" id="hFil"><button class="on" data-k="">Vse</button><button data-k="room">S prijatelji</button><button data-k="daily">Dnevni izziv</button><button data-k="campaign">Popotovanje</button></div>
+    <div class="hlist" id="hList"><span class="small-note">Nalagam …</span></div>
   </div>
 </section>
 
@@ -162,6 +172,6 @@
 <div class="modal" id="mDaily" hidden><div class="modal-in"><span class="mono">Dnevna nagrada</span><h2>Lep pozdrav!</h2><p class="small-note">Vsak dan, ko odpreš igro, pobereš cekine. Zaporedni dnevi dajo več, 7. dan je skrinjica.</p><div class="streak" id="dStreak"></div><button class="btn pri big" id="dClaim">Poberi</button></div></div>
 <div class="modal" id="mShop" hidden><div class="modal-in wide"><div class="shop-h"><div><span class="mono">Trgovina</span><h2>Izgled kart in mize</h2></div><span class="coinchip cbig"><span class="coin">Q</span><b id="shopN">0</b></span><button class="x-close" id="shopX" aria-label="Zapri">×</button></div><p class="small-note">Cekine dobiš z igranjem: igre s prijatelji, dobre poteze, dnevna nagrada in dnevni izziv. Kupljen videz vidiš samo ti.</p><p class="small-note shop-game" id="shopGame" hidden>Med igro lahko porabiš samo cekine, ki si jih imel pred začetkom igre. Cekini iz te igre pridejo na račun ob koncu.</p><div class="shop" id="shopList"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
-<script type="module" src="app.js?v=27"></script>
+<script type="module" src="app.js?v=28"></script>
 </body>
 </html>
