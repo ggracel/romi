@@ -568,7 +568,7 @@ function showDailyReward(nd) {
   const s = nd.streak; const nm = myName().split(' ')[0];
   $('#mDaily h2').textContent = s === 7 ? '7. dan zapored, skrinjica je tvoja!' : s > 1 ? s + '. dan zapored, kar tako naprej!' : 'Ej ' + nm + ', lepo te je videt!';
   $('#mDaily .small-note').textContent = s === 7 ? 'Pravi mojster. Jutri začneš nov krog, nagrade pa spet rastejo.' : 'Cekini za danes te že čakajo. Pridi tudi jutri, nagrada bo še večja, 7. dan pa te čaka skrinjica.'; $('#dStreak').innerHTML = DAILY_REW.map((n, i) => `<div class="d ${i + 1 < s ? 'done' : i + 1 === s ? 'now' : ''} ${i === 6 ? 'chest' : ''}"><small>${i === 6 ? 'Skrinjica' : 'Dan ' + (i + 1)}</small><b>${n}</b></div>`).join('');
-  $('#dClaim').innerHTML = `Daj sem <span class="coin">Q</span> +${nd.amount}`; $('#dClaim').disabled = false; $('#mDaily').hidden = false;
+  $('#dClaim').innerHTML = `Pridobi <span class="coin">Q</span> +${nd.amount}`; $('#dClaim').disabled = false; $('#mDaily').hidden = false;
 }
 $('#dClaim').onclick = async () => { const b = $('#dClaim'); b.disabled = true; const r = await call({ action: 'claim_daily' }, { quiet: true }); if (!r) { b.disabled = false; return toast('Ni uspelo, poskusi znova', 'bad'); }
   const from = rectOf(b); $('#mDaily').hidden = true; S.wallet = r.wallet; S.walletInfo && (S.walletInfo.dailyAvail = false);
