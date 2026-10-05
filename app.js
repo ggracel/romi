@@ -594,11 +594,11 @@ const WD = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob'];
 async function renderToday() {
   const el = $('#today'); const info = S.walletInfo; if (!el || !info) return;
   const w = info.wallet || S.wallet; const nm = myName().split(' ')[0]; const dr = info.dailyResult; const day = info.today;
-  // dnevne nagrade za danes in naslednjih 6 dni
+  // dnevne nagrade: niz 7 dni (Dan 1 do Dan 7); če niz prekineš, začneš spet pri Dan 1
   const avail = info.dailyAvail; const sToday = avail ? info.nextDaily.streak : (w.streak || 1);
   const base = new Date(day + 'T12:00:00');
-  const cells = Array.from({ length: 7 }, (_, i) => { const st = ((sToday - 1 + i) % 7) + 1; const d = new Date(base.getTime() + i * 864e5); const lbl = i === 0 ? 'Danes' : i === 1 ? 'Jutri' : WD[d.getDay()];
-    return `<div class="rd ${i === 0 ? (avail ? 'now' : 'got') : ''} ${st === 7 ? 'chest' : ''}"><small>${lbl}</small><b><span class="coin">Q</span>${DAILY_REW[st - 1]}</b>${st === 7 ? '<em>skrinjica</em>' : ''}${i === 0 && !avail ? '<i class="ok">✓</i>' : ''}</div>`; }).join('');
+  const cells = Array.from({ length: 7 }, (_, k) => { const st = k + 1; const done = st < sToday || (st === sToday && !avail); const now = st === sToday && avail;
+    return `<div class="rd ${now ? 'now' : done ? 'got' : ''} ${st === 7 ? 'chest' : ''}"><small>Dan ${st}</small><b><span class="coin">Q</span>${DAILY_REW[st - 1]}</b>${st === 7 ? '<em>skrinjica</em>' : ''}${done ? '<i class="ok">✓</i>' : ''}</div>`; }).join('');
   // dnevni izziv
   let top = [];
   if (MOCK) top = [{ name: 'Jaka', score: 85, user_id: 'b1' }, { name: 'Maja', score: 40, user_id: 'b3' }].concat(dr && dr.score != null ? [{ name: 'Gašper', score: dr.score, user_id: 'me' }] : []).sort((a, b) => b.score - a.score);

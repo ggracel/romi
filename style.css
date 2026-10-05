@@ -677,7 +677,7 @@ body.face-big :not(.fcl) > .card:not(.back):not(.joker) .ix.b i,.fbig .card:not(
 .rd.now{border-color:#f0c35a;box-shadow:0 0 0 3px rgba(240,195,90,.22);animation:rdPulse 1.8s ease-in-out infinite}
 @keyframes rdPulse{50%{box-shadow:0 0 0 6px rgba(240,195,90,.08)}}
 .rd.got{border-color:rgba(90,216,174,.5);opacity:.8}
-.rd .ok{position:absolute;top:3px;right:3px;width:15px;height:15px;font-size:9px!important;border-radius:50%;background:var(--pos);color:#0d2c2e;font:700 10px var(--mono);display:grid;place-items:center;font-style:normal}
+.rd .ok{position:absolute;top:auto;bottom:3px;right:3px;width:15px;height:15px;font-size:9px!important;border-radius:50%;background:var(--pos);color:#0d2c2e;font:700 10px var(--mono);display:grid;place-items:center;font-style:normal}
 .td-row{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
 .tc{position:relative;padding:18px;border-radius:18px;border:1px solid var(--line);background:rgba(26,22,23,.85);display:flex;flex-direction:column;gap:6px}
 .tc h3{font-size:19px;margin:2px 0 0}
@@ -711,7 +711,7 @@ body.face-big :not(.fcl) > .card:not(.back):not(.joker) .ix.b i,.fbig .card:not(
 .tc.campc .st{color:#f0c35a;font-family:var(--mono)}
 .mob .td-hi{grid-template-columns:1fr}
 .mob .rds{grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
-@media (max-width:520px){.mob .rd em{display:none}.mob .rd .ok{width:13px;height:13px;top:2px;right:2px}}
+@media (max-width:520px){.mob .rd em{display:none}.mob .rd .ok{width:12px;height:12px;top:auto;bottom:2px;right:2px;font-size:8px!important}}
 @media (max-width:420px){.mob .rds{gap:4px}.mob .rd{padding:7px 1px 6px}.mob .rd b .coin{display:none}.mob .rd small{font-size:8.5px;letter-spacing:.02em}.mob .td-hi{padding:14px 12px}}
 .mob .td-row{grid-template-columns:1fr}
 .mob .tc.campc{flex-direction:column;align-items:stretch}.mob .tc .btn{justify-content:center}
@@ -873,3 +873,4 @@ body:not(.mob) .scores{min-width:0;align-items:center}
 body:not(.mob) #scores{min-width:0;overflow:hidden}
 @media (max-width:1460px){body:not(.mob) #scores .chip{padding-right:8px}body:not(.mob) #scores .chip em{display:none}}
 @media (max-width:1280px){body:not(.mob) #scores{display:none!important}}
+@media (max-width:420px){.mob .rd .ok{display:none}.mob .rd.got{background:rgba(90,216,174,.08)}}
