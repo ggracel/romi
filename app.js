@@ -355,10 +355,14 @@ function seatMap() { // moj sedež spodaj, ostali v smeri urinega kazalca: levo,
 }
 function turnLeft() { const v = S.view; if (!v) return 0; if (v.paused) return Math.max(0, Math.ceil((v.turnTime * 1000 - (v.pausedAt || 0)) / 1000)); return Math.max(0, Math.ceil((v.turnTime * 1000 - (Date.now() - S.offset - v.turnStarted)) / 1000)); }
 function tickTimer() {
-  const v = S.view; if (!v || v.phase === 'roundEnd' || v.status !== 'playing') return;
+  const v = S.view; if (!v || v.phase === 'roundEnd' || v.status !== 'playing') { document.body.classList.remove('hurry', 'hurry2'); return; }
   const left = v.paused ? Math.ceil((v.turnTime * 1000 - (v.pausedAtLeft || 0)) / 1000) : turnLeft();
   $$('[data-timer]').forEach((e) => { e.textContent = left; e.style.setProperty('--p', left / v.turnTime); });
-  $$('.ring').forEach((r) => r.classList.toggle('urgent', left <= 10 && left > 0 && !v.paused));
+  const live = left > 0 && !v.paused && !v.noTimer; const mine = v.turn === v.me.seat && v.phase !== 'roundEnd';
+  $$('.ring').forEach((r) => { r.classList.toggle('hurry', live && left <= 30 && left > 10); r.classList.toggle('urgent', live && left <= 10); });
+  // zadnjih 30 s, ko si na potezi: opozorilo (enkrat na potezo) in utripanje okoli roke
+  const b = document.body.classList; b.toggle('hurry', live && mine && left <= 30); b.toggle('hurry2', live && mine && left <= 10);
+  const tk = v.round + ':' + v.turnStarted; if (live && mine && left <= 30 && left > 25 && S.hurryWarned !== tk) { S.hurryWarned = tk; toast('Še ' + left + ' sekund za potezo!', 'bad'); }
   const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 1250) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 350)); return; }
   if (left <= 0 && !v.paused && !S.busy && !S.ticked) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 2000)); }
 }
@@ -379,6 +383,7 @@ function render(prev) {
   $('#deckN').textContent = v.deckCount + ' kart'; $('#disN').textContent = v.discardCount + ' kart';
   const ds = $('#disStack'); ds.innerHTML = ''; for (let k = 0; k < Math.min(2, v.discardCount - 1); k++) { const b = document.createElement('div'); b.className = 'card blank'; ds.appendChild(b); } v.discard.forEach((c) => ds.appendChild(cardEl(c)));
   $('#bAll').hidden = !(myTurn && v.phase === 'draw' && v.discardCount > 1); $('#bAllN').textContent = v.discardCount;
+  document.body.classList.toggle('no-timer', !!v.noTimer);
   const hot = myTurn && v.phase === 'draw'; $('#pDeck').classList.toggle('hot', hot); $('#pDis').classList.toggle('hot', hot); document.body.classList.toggle('need-draw', hot && !v.paused);
   const map = seatMap();
   $$('.zone').forEach((z) => { const seat = map[z.dataset.z]; if (seat === undefined) { z.hidden = true; return; } z.hidden = false; const p = v.players[seat];
@@ -664,16 +669,15 @@ async function openCampaign() {
     <div class="crows"><div><span>Igra do</span><b>${l.goal} točk</b></div><div><span>Nagrada prvič</span><b><span class="coin">Q</span>${l.coins}</b></div><div><span>Vsaka nova zvezdica</span><b><span class="coin">Q</span>10</b></div>${l.unlock ? '<div><span>Odklene</span><b>' + BOSS_BACK[l.unlock] + '</b></div>' : ''}</div>
     <div class="cstars"><div class="${st >= 1 ? 'on' : ''}"><b>★</b>zmagaš</div><div class="${st >= 2 ? 'on' : ''}"><b>★★</b>zmagaš za 50+ točk</div><div class="${st >= 3 ? 'on' : ''}"><b>★★★</b>zmagaš za 100+ točk</div></div>
     ${l.unlock ? `<div class="cunl"><div class="card back v-${bb} pvc"><i class="q"></i></div><span>Premagaj ${l.boss === 'šefica' ? 'šefico' : 'šefa'} ${esc(acc(l.bots[0][0]))} in dobiš ${BOSS_BACK[l.unlock]} kart, ki ga v trgovini ni.</span></div>` : ''}
-    <label class="cnt-t"><input type="checkbox" id="campNoTimer" ${S.campNoTimer ? 'checked' : ''}> Igraj brez štoparice (v svojem ritmu)</label>
+    <p class="cnt-t">${l.boss ? '⏱ Pri šefu imaš 90 sekund na potezo.' : 'Brez štoparice, igraš v svojem ritmu.'}</p>
     <button class="btn pri big" id="campPlay" ${open ? '' : 'disabled'}>${open ? (st ? 'Igraj znova' : 'Igraj nivo ' + l.n) : 'Najprej premagaj nivo ' + (l.n - 1)}</button>
     <p class="small-note">Namig v igri stane 20 cekinov in pokaže možno kombinacijo.</p>`;
-  $('#campNoTimer').onchange = (e) => (S.campNoTimer = e.target.checked);
   $('#campPlay').onclick = () => startCampaign(l.n);
   const top = (C.top || []).filter((t) => t.total > 0);
   $('#campTop').innerHTML = `<div class="lb-h"><span class="mono">Lestvica kampanje</span><span class="mono lb-sub">zvezdice</span></div>` + (top.length ? '<div class="ctl">' + top.map((t, i) => `<div class="${t.user_id === S.user.id ? 'you' : ''}"><em>${i + 1}.</em>${esc(t.name)}<b>★ ${t.total}</b></div>`).join('') + '</div>' : '<p class="small-note">Še nihče nima zvezdic. Bodi prvi!</p>');
 }
 async function startCampaign(n) {
-  const r = await call({ action: 'campaign_start', level: n, noTimer: !!S.campNoTimer }); if (!r || !r.room) return;
+  const r = await call({ action: 'campaign_start', level: n, noTimer: !(E.CAMPAIGN.levels[n - 1] || {}).boss }); if (!r || !r.room) return;
   unsubscribeRoom(); S.room = r.room; S.players = []; S.lastCamp = n; if (!MOCK) subscribeRoom(r.room.id, () => refreshRoom()); startGame();
 }
 $('#campBack').onclick = () => enterLobby();

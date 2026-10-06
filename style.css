@@ -930,3 +930,15 @@ body.dragging #pDis.dz.drop-over::before{border-color:var(--teal);background:rgb
 .hm-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hm-n small{overflow:hidden;text-overflow:ellipsis}
 .mob .topbtns{gap:6px;flex-wrap:nowrap}.mob .topbtns .btn,.mob .topbtns .chip{padding:7px 9px;font-size:12px;white-space:nowrap}
 @media (max-width:400px){.mob .topbtns #meName{display:none}}
+
+/* v23: brez štoparice skrij krog; zadnjih 30 s opozorilo */
+body.no-timer .ring{display:none!important}
+.ring.hurry{animation:hur 1s ease-in-out infinite}
+.ring.hurry span{color:var(--warn)}
+@keyframes hur{0%,100%{box-shadow:0 0 0 0 rgba(229,184,74,0)}50%{box-shadow:0 0 0 7px rgba(229,184,74,.3)}}
+.ring.urgent{animation:urg .45s ease-in-out infinite alternate}
+@keyframes urg{from{box-shadow:0 0 0 0 rgba(232,120,138,0);transform:scale(1)}to{box-shadow:0 0 0 9px rgba(232,120,138,.35);transform:scale(1.08)}}
+body.hurry[data-screen=game]::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:70;border:3px solid rgba(229,184,74,.55);box-shadow:inset 0 0 60px rgba(229,184,74,.18);animation:edge 1s ease-in-out infinite}
+body.hurry2[data-screen=game]::after{border-color:rgba(232,120,138,.75);box-shadow:inset 0 0 80px rgba(232,120,138,.28);animation-duration:.5s}
+@keyframes edge{0%,100%{opacity:.35}50%{opacity:1}}
+p.cnt-t{cursor:default;margin:2px 0 0}
