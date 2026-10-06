@@ -942,3 +942,12 @@ body.hurry[data-screen=game]::after{content:"";position:fixed;inset:0;pointer-ev
 body.hurry2[data-screen=game]::after{border-color:rgba(232,120,138,.75);box-shadow:inset 0 0 80px rgba(232,120,138,.28);animation-duration:.5s}
 @keyframes edge{0%,100%{opacity:.35}50%{opacity:1}}
 p.cnt-t{cursor:default;margin:2px 0 0}
+
+/* v24: kdo je vrgel karto */
+.dis-by{position:absolute;top:-36px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;white-space:nowrap;font:600 11.5px var(--inter);padding:4px 10px 4px 4px;border-radius:99px;background:rgba(12,10,11,.85);border:1px solid var(--line2);z-index:4;animation:dbIn .25s ease-out;pointer-events:none}
+.dis-by i{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font:700 9px var(--mono);font-style:normal;color:#0d2c2e}
+.dis-by.out{opacity:0;transition:opacity .4s}
+@keyframes dbIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
+#disStack .card.just{animation:justIn 1.4s ease-out}
+@keyframes justIn{0%{box-shadow:0 0 0 0 rgba(70,190,197,.0)}20%{box-shadow:0 0 0 5px rgba(70,190,197,.55)}100%{box-shadow:0 0 0 0 rgba(70,190,197,0)}}
+.mob .dis-by{top:50%;left:calc(100% + 8px);transform:translateY(-50%);font-size:10.5px;animation:none}

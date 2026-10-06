@@ -341,12 +341,33 @@ function animDraws(prev, v) {
   if (!prev || !prev.log || prev.id !== v.id || document.body.dataset.screen !== 'game') return;
   const last = prev.log.length ? key(prev.log[prev.log.length - 1]) : null; let i = last ? log.map(key).lastIndexOf(last) : -1; if (last && i < 0) return;
   const fresh = log.slice(i + 1); if (!fresh.length || fresh.length > 8) return;
-  const map = seatMap(); const zoneOf = {}; Object.entries(map).forEach(([z, s]) => (zoneOf[s] = z)); let k = 0;
-  fresh.forEach((l) => { const m = l.m.match(/^(.+) je (potegnil s kupa|vzel (\S+) z odloženih|vzel cel kupček)/); if (!m) return;
-    const p = v.players.find((x) => x.name === m[1]); if (!p || p.seat === v.me.seat) return; const z = $(`.zone[data-z="${zoneOf[p.seat]}"]`); if (!z || z.hidden) return;
-    const deck = m[2].startsWith('potegnil'); const src = deck ? $('#pDeck .stack') : $('#disStack'); const dst = z.querySelector('.fan') || z.querySelector('.av'); if (!src || !dst) return;
-    const fr = rectOf(src); const cw = fr.w || 60, ch = fr.h || 86; const from = { x: fr.x, y: fr.y, w: cw, h: ch }; const tr = rectOf(dst); const to = { x: tr.x + tr.w / 2 - cw * .2, y: tr.y + tr.h / 2 - ch * .2, w: cw * .4, h: ch * .4 };
-    const node = m[3] ? cardEl(m[3]) : backEl(); if (node.dataset) delete node.dataset.id; fly(node, from, to, { dur: 560, delay: k++ * 140, rot: -8 }); });
+  const map = seatMap(); const zoneOf = {}; Object.entries(map).forEach(([z, s]) => (zoneOf[s] = z));
+  const zoneFor = (name) => { const p = v.players.find((x) => x.name === name); if (!p || p.seat === v.me.seat) return null; const z = $(`.zone[data-z="${zoneOf[p.seat]}"]`); return z && !z.hidden ? { p, z, dst: z.querySelector('.fan') || z.querySelector('.av') } : null; };
+  // zaporedje potez drugih igralcev: vlečenje, polaganje, odlaganje (eno za drugim, da se igri lažje sledi)
+  const disIdx = fresh.map((l, j) => (/zavrgel karto\.$/.test(l.m) ? j : -1)).filter((j) => j >= 0); const lastDis = disIdx[disIdx.length - 1];
+  const takenAfter = lastDis != null && fresh.slice(lastDis + 1).some((l) => / je vzel /.test(l.m));
+  let t = 0;
+  fresh.forEach((l, j) => {
+    let m = l.m.match(/^(.+) je (potegnil s kupa|vzel (\S+) z odloženih|vzel cel kupček)/);
+    if (m) { const Z = zoneFor(m[1]); if (!Z || !Z.dst) return; const deck = m[2].startsWith('potegnil'); const src = deck ? $('#pDeck .stack') : $('#disStack'); if (!src) return;
+      const fr = rectOf(src); const cw = fr.w || 60, ch = fr.h || 86; const tr = rectOf(Z.dst); const to = { x: tr.x + tr.w / 2 - cw * .2, y: tr.y + tr.h / 2 - ch * .2, w: cw * .4, h: ch * .4 };
+      const node = m[3] ? cardEl(m[3]) : backEl(); if (node.dataset) delete node.dataset.id; fly(node, { x: fr.x, y: fr.y, w: cw, h: ch }, to, { dur: 520, delay: t, rot: -8 }); t += 480; return; }
+    if (/ je (položil|dodal|s .+ zamenjal)/.test(l.m)) { t += 200; return; }
+    m = l.m.match(/^(?:Čas je potekel, app je za )?(.+?) (?:je )?zavrgel karto\.$/);
+    if (m && j === lastDis && !takenAfter && v.discard && v.discard.length) { const Z = zoneFor(m[1]); const ds = $('#disStack'); if (!Z || !Z.dst || !ds) return;
+      const top = ds.lastElementChild; const to = rectOf(top || ds); const tr = rectOf(Z.dst); const cw = to.w || 60, ch = to.h || 86;
+      const from = { x: tr.x + tr.w / 2 - cw * .3, y: tr.y + tr.h / 2 - ch * .3, w: cw * .6, h: ch * .6 };
+      if (top) top.style.visibility = 'hidden';
+      const node = cardEl(v.discard[v.discard.length - 1]); if (node.dataset) delete node.dataset.id; const p = Z.p; const d0 = t + 120;
+      fly(node, from, { x: to.x, y: to.y, w: cw, h: ch }, { dur: 620, delay: d0, rot: 10 }).then(() => { const tp = $('#disStack') && $('#disStack').lastElementChild; if (tp) tp.style.visibility = ''; showDisBy(p); });
+      t += 760; }
+  });
+}
+function showDisBy(p) {
+  const pile = $('#pDis'); if (!pile) return; $$('#pDis .dis-by').forEach((x) => x.remove());
+  const b = document.createElement('span'); b.className = 'dis-by'; b.innerHTML = `<i style="background:${COLORS[p.seat]}">${ini(p.name)}</i>${esc(p.name.replace(' (avtomatsko)', ''))}`; pile.appendChild(b);
+  const ds = $('#disStack .card:last-child'); if (ds) { ds.classList.remove('just'); void ds.offsetWidth; ds.classList.add('just'); }
+  setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 400); }, 3200);
 }
 function seatMap() { // moj sedež spodaj, ostali v smeri urinega kazalca: levo, zgoraj, desno
   const v = S.view; const n = v.players.length; const me = v.me.seat; const order = []; for (let i = 1; i < n; i++) order.push((me + i) % n);
@@ -363,7 +384,7 @@ function tickTimer() {
   // zadnjih 30 s, ko si na potezi: opozorilo (enkrat na potezo) in utripanje okoli roke
   const b = document.body.classList; b.toggle('hurry', live && mine && left <= 30); b.toggle('hurry2', live && mine && left <= 10);
   const tk = v.round + ':' + v.turnStarted; if (live && mine && left <= 30 && left > 25 && S.hurryWarned !== tk) { S.hurryWarned = tk; toast('Še ' + left + ' sekund za potezo!', 'bad'); }
-  const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 1250) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 350)); return; }
+  const curP = v.players[v.turn]; if (curP && curP.bot && !v.paused && !S.busy && !S.ticked && Date.now() - S.offset - v.turnStarted > 2600) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 350)); return; }
   if (left <= 0 && !v.paused && !S.busy && !S.ticked) { S.ticked = true; call({ action: 'tick' }, { quiet: true }).finally(() => setTimeout(() => (S.ticked = false), 2000)); }
 }
 function selCards() { return S.order.map((id) => parse(id)); }
@@ -520,6 +541,7 @@ function rectOf(el) { const r = el.getBoundingClientRect(); return { x: r.left, 
 S.flying = new Set();
 function fly(node, from, to, { dur = 520, delay = 0, rot = 0 } = {}) {
   const fid = node && node.dataset ? node.dataset.id : null; if (fid) S.flying.add(fid);
+  if (delay > 0) return new Promise((res) => setTimeout(() => fly(node, from, to, { dur, delay: 0, rot }).then(res), delay));
   return new Promise((res) => { const g = node.cloneNode(true); g.classList.add('ghost'); g.style.cssText += `;position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;--cw:${from.w}px;--ch:${from.h}px;margin:0;z-index:80;pointer-events:none;transform:none;transform-origin:0 0;visibility:visible`; document.body.appendChild(g);
     const dx = to.x - from.x, dy = to.y - from.y, sx = to.w / from.w, sy = to.h / from.h;
     g.animate([{ transform: 'translate(0,0) rotate(0deg)' }, { transform: `translate(${dx * .5}px,${dy * .5 - 40}px) rotate(${rot}deg) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: .5 }, { transform: `translate(${dx}px,${dy}px) rotate(0deg) scale(${sx},${sy})` }], { duration: dur, delay, easing: EASE, fill: 'forwards' }).onfinish = () => { g.remove(); if (fid) { S.flying.delete(fid); $$(`.meld .card[data-id="${CSS.escape(fid)}"], #hand .card[data-id="${CSS.escape(fid)}"]`).forEach((e) => (e.style.visibility = '')); } res(); }; });
