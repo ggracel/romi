@@ -1,5 +1,5 @@
 // foqs.romi - klient. Vsa pravila preveri strežnik (edge funkcija "romi"); tukaj je samo prikaz, predogled in animacije.
-import * as E from './engine.js?v=15';
+import * as E from './engine.js?v=16';
 const { validate, arrange, addOptions, isJ, parse, val, RANKS } = E;
 
 const SB_URL = 'https://cgnihdlprjqpawvpznsw.supabase.co';
@@ -602,6 +602,8 @@ function applyLook(w) { const b = document.body.classList; ['back-gold', 'back-n
 function setCoins(n, bump) { $('#coinN').textContent = n; $('#shopN').textContent = n; if (bump) { const c = $('#coinChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } }
 async function loadWallet() {
   const r = await call({ action: 'wallet' }, { quiet: true }); if (!r || !r.wallet) return;
+  // niz dnevnih nagrad: če včeraj nisi pobral, se začne spet pri 1. dnevu (enako kot na strežniku)
+  if (r.dailyAvail && r.today) { const y = new Date(r.today + 'T12:00:00Z'); y.setUTCDate(y.getUTCDate() - 1); const yd = y.toISOString().slice(0, 10); if (String(r.wallet.last_daily || '').slice(0, 10) !== yd) { r.nextDaily = { streak: 1, amount: DAILY_REW[0] }; r.wallet = { ...r.wallet, streak: 0 }; } }
   S.wallet = r.wallet; S.walletInfo = r; setCoins(r.wallet.coins); applyLook(r.wallet); renderToday();
   if (r.dailyAvail && !S.dailyShown && document.body.dataset.screen === 'lobby') { S.dailyShown = true; showDailyReward(r.nextDaily); }
 }

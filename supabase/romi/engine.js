@@ -72,6 +72,8 @@ export function swapIndex(meld, card) {
 export function addOptions(meld, card) {
   const si = swapIndex(meld, card); if (si >= 0) return { swap: si };
   const base = meld.cards.map((x) => x.c); const bt = validate(base);
+  // set samih jokerjev: dodaš lahko samo še en joker (do 4)
+  if (bt && bt.mode === 'jokers') { if (!isJ(card) || base.length >= 4) return null; const test = validate([...base, card]); return test ? { test, lo: null, hi: null, auto: arrange([...base, card], test) } : null; }
   // set: dovolj je, da je kombinacija še veljavna (največ 4 karte)
   // stari nizi z asom spodaj (A-2-3, položeni pred spremembo pravil) ostanejo nizi, da jih lahko še podaljšaš navzgor
   const natB = base.filter((c) => !isJ(c)); const oldRun = !bt && natB.length > 1 && natB.every((c) => c.s === natB[0].s) && new Set(natB.map((c) => c.r)).size === natB.length;
