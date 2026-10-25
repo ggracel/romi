@@ -951,3 +951,27 @@ p.cnt-t{cursor:default;margin:2px 0 0}
 #disStack .card.just{animation:justIn 1.4s ease-out}
 @keyframes justIn{0%{box-shadow:0 0 0 0 rgba(70,190,197,.0)}20%{box-shadow:0 0 0 5px rgba(70,190,197,.55)}100%{box-shadow:0 0 0 0 rgba(70,190,197,0)}}
 .mob .dis-by{top:50%;left:calc(100% + 8px);transform:translateY(-50%);font-size:10.5px;animation:none}
+
+/* v25: velikost kart */
+.meld{zoom:var(--zm,1)}
+body:not(.mob) .hand{justify-content:safe center;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.mob .hand-wrap.scrolly{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.mob .hand-wrap.scrolly #hand .card{touch-action:pan-x}
+.msize{background:transparent;backdrop-filter:none;place-items:start end;padding:64px 18px 18px}
+.msize .modal-in{width:320px;padding:18px 18px 14px;border-radius:18px;text-align:left}
+.mob .msize{place-items:start stretch;padding:0}
+.mob .msize .modal-in{width:100%;border-radius:0 0 22px 22px;padding:calc(14px + env(safe-area-inset-top)) 16px 12px;animation:none}
+.mob .msize .small-note{display:none}
+.mob .sz-sl{margin-bottom:8px}
+.sz-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.sz-h b{font-size:16px}
+.sz-pre{display:flex;gap:6px;margin-bottom:12px}
+.sz-pre button{flex:1;font:600 12.5px var(--inter);padding:8px;border-radius:10px;border:1px solid var(--line2);background:var(--ink);color:var(--dim)}
+.sz-pre button:hover{border-color:var(--teal);color:var(--teal)}
+.sz-sl{margin-bottom:12px}
+.sz-t{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;font-weight:600;margin-bottom:4px}
+.sz-t em{font:600 12px var(--mono);color:var(--teal);font-style:normal}
+.sz-row{display:flex;align-items:center;gap:10px}.sz-row span{font-size:11px;color:var(--mute)}.sz-row span.big{font-size:17px}
+.sz-row input{flex:1;accent-color:var(--teal);height:26px}
+.mob #btnSize{display:none}
+body:not(.mob) .hand-wrap{min-width:0;flex:1 1 auto;max-width:100%}
+body:not(.mob) .hand{min-width:0;max-width:100%}

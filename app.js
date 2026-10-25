@@ -162,12 +162,27 @@ function layoutMode() {
 }
 layoutMode();
 let rsT; addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { layoutMode(); if (S.view && document.body.dataset.screen === 'game') render(); }, 120); });
-/* roka na malem zaslonu: karte se razporedijo po širini, pokončno po potrebi v 2 vrsti */
+/* velikost kart (nastavitev na napravi): roka, kup in odložene, položene karte */
+const SZ_KEY = 'romi-size'; S.size = { hand: 100, pile: 100, meld: 100 };
+try { Object.assign(S.size, JSON.parse(localStorage.getItem(SZ_KEY) || '{}')); } catch (_) {}
+function scaleVars(el, pct) { if (!el) return; el.style.removeProperty('--cw'); el.style.removeProperty('--ch'); if (pct === 100) return; const cs = getComputedStyle(el); const cw = parseFloat(cs.getPropertyValue('--cw')), ch = parseFloat(cs.getPropertyValue('--ch')); if (!cw || !ch) return; el.style.setProperty('--cw', (cw * pct) / 100 + 'px'); el.style.setProperty('--ch', (ch * pct) / 100 + 'px'); }
+function applySizes() { document.body.style.setProperty('--zm', S.size.meld / 100); scaleVars($('.center'), S.size.pile); if (S.view && document.body.dataset.screen === 'game') fitHand(); }
+function renderSize() { ['hand', 'pile', 'meld'].forEach((k) => { $(`#mSize [data-v="${k}"]`).value = S.size[k]; $(`#mSize [data-o="${k}"]`).textContent = S.size[k] + ' %'; }); }
+function setSize(k, v) { S.size[k] = v; try { localStorage.setItem(SZ_KEY, JSON.stringify(S.size)); } catch (_) {} renderSize(); applySizes(); }
+function openSize() { document.body.classList.remove('menu-open'); renderSize(); $('#mSize').hidden = false; }
+document.body.style.setProperty('--zm', S.size.meld / 100);
+$('#bSize').onclick = openSize; $('#btnSize').onclick = openSize; $('#sizeX').onclick = () => ($('#mSize').hidden = true);
+$('#mSize').addEventListener('click', (e) => { if (e.target.id === 'mSize') $('#mSize').hidden = true; });
+$$('#mSize input[type=range]').forEach((r) => (r.oninput = () => setSize(r.dataset.v, +r.value)));
+$$('#mSize [data-p]').forEach((b) => (b.onclick = () => { ['hand', 'pile', 'meld'].forEach((k) => (S.size[k] = +b.dataset.p)); setSize('hand', +b.dataset.p); }));
+/* roka na malem zaslonu: karte se razporedijo po širini, pokončno po potrebi v 2 vrsti; ko so karte prevelike, roka drsi vodoravno */
 function fitHand() {
-  const h = $('#hand'); const cards = $$('#hand .card');
+  const h = $('#hand'); const cards = $$('#hand .card'); scaleVars(h, S.size.hand); const wrap = h.parentElement; h.style.width = ''; wrap.classList.remove('scrolly');
   if (!document.body.classList.contains('mob')) { h.style.height = ''; cards.forEach((e) => { e.style.left = e.style.top = e.style.zIndex = ''; }); return; }
-  const cs = getComputedStyle(h); const cw = parseFloat(cs.getPropertyValue('--cw')) || 60, ch = parseFloat(cs.getPropertyValue('--ch')) || 84; const W = h.clientWidth; const n = cards.length;
+  const cs = getComputedStyle(h); const cw = parseFloat(cs.getPropertyValue('--cw')) || 60, ch = parseFloat(cs.getPropertyValue('--ch')) || 84; let W = h.clientWidth; const n = cards.length;
   const top = 14, gap = 8; const rows = document.body.classList.contains('por') && n * cw * 0.55 + cw * 0.45 > W ? 2 : 1; const per = Math.ceil(n / rows) || 1;
+  // premalo prostora (velike karte, veliko kart): karte ostanejo berljive, roka se drsa vodoravno
+  const minStep = cw * 0.42; if (per > 1 && (W - cw) / (per - 1) < minStep) { W = Math.ceil(cw + minStep * (per - 1) + 8); h.style.width = W + 'px'; wrap.classList.add('scrolly'); }
   cards.forEach((e, i) => { const r = Math.floor(i / per), k = i - r * per, inRow = r === rows - 1 ? n - r * per : per; const step = inRow > 1 ? Math.min(cw + 6, (W - cw) / (inRow - 1)) : 0; const x0 = (W - (step * (inRow - 1) + cw)) / 2;
     e.style.left = x0 + k * step + 'px'; e.style.top = top + r * (ch + gap) + 'px'; e.style.zIndex = i + 1; });
   h.style.height = top + rows * ch + (rows - 1) * gap + 4 + 'px';
@@ -429,7 +444,7 @@ function render(prev) {
   // roka
   const h = $('#hand'); const before = new Map(); $$('#hand .card').forEach((e) => before.set(e.dataset.id, e.getBoundingClientRect()));
   h.innerHTML = ''; handOrdered(v.me.hand.map(parse)).forEach((c) => { const e = cardEl(c, S.sel.has(c.id) ? 'sel' : ''); const o = document.createElement('span'); o.className = 'ord'; o.textContent = S.order.indexOf(c.id) + 1; e.appendChild(o); e.onclick = () => toggleSel(c.id); h.appendChild(e); });
-  fitHand();
+  scaleVars($('.center'), S.size.pile); fitHand();
   flipHand(before, prev);
   // predogled
   const pv = $('#prev');
